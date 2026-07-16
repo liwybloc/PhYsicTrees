@@ -1,0 +1,44 @@
+version = mod_version
+group = mod_group_id
+
+allprojects {
+    version = rootProject.mod_version
+    group = rootProject.mod_group_id
+
+    repositories {
+        mavenCentral()
+        mavenLocal()
+        maven {
+            name = 'BlameJared'
+            url = 'https://maven.blamejared.com/'
+        }
+        maven {
+            name = 'Fuzs Mod Resources'
+            url = 'https://raw.githubusercontent.com/Fuzss/modresources/main/maven/'
+        }
+        maven {
+            name = 'Create'
+            url = 'https://maven.createmod.net'
+        }
+        maven {
+            name = 'DevOS Snapshots'
+            url = 'https://mvn.devos.one/snapshots'
+        }
+        maven {
+            name = 'Modrinth'
+            url = 'https://api.modrinth.com/maven'
+        }
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'RyanHCode Maven'
+                    url = 'https://maven.ryanhcode.dev/releases'
+                }
+            }
+            filter {
+                includeGroup 'dev.ryanhcode.sable'
+                includeGroup 'dev.ryanhcode.sable-companion'
+            }
+        }
+    }
+}
