@@ -6,15 +6,14 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayDeque;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 public final class TreeFloodFill {
     private static final int MAX_LOGS = 256;
     private static final int MAX_LEAVES = 2048;
     private static final int LEAF_PADDING = 7;
+    private static final int MAX_LEAF_CONNECTION_DISTANCE = LEAF_PADDING;
     private static final Direction[] CARDINAL_DIRECTIONS = Direction.values();
     private static final BlockPos[] LOG_NEIGHBORS = buildNeighbors();
 
@@ -31,12 +30,8 @@ public final class TreeFloodFill {
         if (connectedLogs.isEmpty()) {
             return null;
         }
-        if (!hasConnectedLogBelow(start, connectedLogs)) {
-            return null;
-        }
-
         final TreeResult result = new TreeResult();
-        if (!isGrounded(level, connectedLogs)) {
+        if (!hasValidPrimaryBase(level, start, connectedLogs)) {
             return null;
         }
         result.markGrounded();
@@ -73,23 +68,62 @@ public final class TreeFloodFill {
         return result.isValid() ? result : null;
     }
 
-    private static boolean isGrounded(final BlockGetter level, final Set<BlockPos> logs) {
-        for (final BlockPos log : logs) {
-            final BlockState below = level.getBlockState(log.below());
-            if (TreeUtil.isRoot(below) || TreeUtil.canBeRoot(below)) {
-                return true;
+    private static boolean hasValidPrimaryBase(final BlockGetter level, final BlockPos start, final Set<BlockPos> connectedLogs) {
+        final Set<BlockPos> remainingLogs = new HashSet<>(connectedLogs);
+        remainingLogs.remove(start);
+        final Set<BlockPos> visited = new HashSet<>();
+        boolean hasAnyGroundConnection = isGroundedLog(level, start);
+
+        for (final BlockPos log : remainingLogs) {
+            if (visited.contains(log)) {
+                continue;
+            }
+
+            final LogComponent component = collectLogComponent(level, log, remainingLogs, visited, start);
+            hasAnyGroundConnection |= component.grounded;
+            if (component.grounded && component.containsFallingLog) {
+                return false;
             }
         }
-        return false;
+
+        return hasAnyGroundConnection;
     }
 
-    private static boolean hasConnectedLogBelow(final BlockPos start, final Set<BlockPos> logs) {
-        for (final BlockPos log : logs) {
-            if (log.getY() < start.getY()) {
-                return true;
+    private static LogComponent collectLogComponent(final BlockGetter level, final BlockPos start, final Set<BlockPos> allowedLogs, final Set<BlockPos> visited, final BlockPos cutPos) {
+        final ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        final BlockPos immutableStart = start.immutable();
+        queue.add(immutableStart);
+        visited.add(immutableStart);
+        boolean grounded = false;
+        boolean containsFallingLog = false;
+
+        while (!queue.isEmpty()) {
+            final BlockPos current = queue.removeFirst();
+            grounded |= isGroundedLog(level, current);
+            containsFallingLog |= current.getY() >= cutPos.getY();
+
+            final BlockState currentState = level.getBlockState(current);
+            for (final BlockPos offset : LOG_NEIGHBORS) {
+                final BlockPos next = current.offset(offset);
+                if (!allowedLogs.contains(next) || visited.contains(next)) {
+                    continue;
+                }
+
+                final BlockState nextState = level.getBlockState(next);
+                if (canSpreadLog(current, next, currentState, nextState)) {
+                    final BlockPos immutableNext = next.immutable();
+                    visited.add(immutableNext);
+                    queue.add(immutableNext);
+                }
             }
         }
-        return false;
+
+        return new LogComponent(grounded, containsFallingLog);
+    }
+
+    private static boolean isGroundedLog(final BlockGetter level, final BlockPos log) {
+        final BlockState below = level.getBlockState(log.below());
+        return TreeUtil.isRoot(below) || TreeUtil.canBeRoot(below);
     }
 
     private static Set<BlockPos> collectConnectedLogs(final BlockGetter level, final BlockPos start, final BlockPos ignoredBrokenPos, final Set<BlockPos> excludedLogs) {
@@ -279,11 +313,10 @@ public final class TreeFloodFill {
 
     private static void collectLeaves(final BlockGetter level, final TreeResult result, final Set<BlockPos> protectedLeaves, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ) {
         final Set<BlockPos> visitedLeaves = new HashSet<>();
-        final ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        final Map<BlockPos, Integer> connectionDistances = new HashMap<>();
+        final ArrayDeque<LeafSearchNode> queue = new ArrayDeque<>();
 
         for (final BlockPos logPos : result.logs()) {
-            checkNeighborLeafBounds(level, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, connectionDistances, logPos, 1);
+            checkNeighborLeafBounds(level, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, logPos, 1);
         }
 
         while (!queue.isEmpty()) {
@@ -291,20 +324,23 @@ public final class TreeFloodFill {
                 return;
             }
 
-            final BlockPos current = queue.removeFirst();
-            final BlockState currentState = level.getBlockState(current);
+            final LeafSearchNode current = queue.removeFirst();
+            final BlockState currentState = level.getBlockState(current.pos);
             if (!isCollectableLeaf(currentState)) {
                 continue;
             }
 
-            result.addLeaf(current);
-            final int currentDistance = connectionDistances.getOrDefault(current, Integer.MAX_VALUE);
-            result.setLeafConnectionDistance(current, currentDistance);
-            checkNeighborLeafBounds(level, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, connectionDistances, current, currentDistance + 1);
+            result.addLeaf(current.pos);
+            result.setLeafConnectionDistance(current.pos, current.distance);
+            checkNeighborLeafBounds(level, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, current.pos, current.distance + 1);
         }
     }
 
-    private static void checkNeighborLeafBounds(final BlockGetter level, final Set<BlockPos> protectedLeaves, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ, final Set<BlockPos> visitedLeaves, final ArrayDeque<BlockPos> queue, final Map<BlockPos, Integer> connectionDistances, final BlockPos sourcePos, final int nextDistance) {
+    private static void checkNeighborLeafBounds(final BlockGetter level, final Set<BlockPos> protectedLeaves, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ, final Set<BlockPos> visitedLeaves, final ArrayDeque<LeafSearchNode> queue, final BlockPos sourcePos, final int nextDistance) {
+        if (nextDistance > MAX_LEAF_CONNECTION_DISTANCE) {
+            return;
+        }
+
         for (final Direction direction : CARDINAL_DIRECTIONS) {
             final BlockPos leafPos = sourcePos.relative(direction);
             if (isWithinLeafBounds(leafPos, minX, minY, minZ, maxX, maxY, maxZ)
@@ -312,8 +348,7 @@ public final class TreeFloodFill {
                     && visitedLeaves.add(leafPos.immutable())
                     && isCollectableLeaf(level.getBlockState(leafPos))) {
                 final BlockPos immutableLeafPos = leafPos.immutable();
-                connectionDistances.put(immutableLeafPos, nextDistance);
-                queue.add(immutableLeafPos);
+                queue.add(new LeafSearchNode(immutableLeafPos, nextDistance));
             }
         }
     }
@@ -406,5 +441,8 @@ public final class TreeFloodFill {
     }
 
     private record LeafSearchNode(BlockPos pos, int distance) {
+    }
+
+    private record LogComponent(boolean grounded, boolean containsFallingLog) {
     }
 }

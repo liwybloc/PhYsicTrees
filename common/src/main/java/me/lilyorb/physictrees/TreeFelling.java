@@ -8,6 +8,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -36,7 +37,12 @@ public final class TreeFelling {
             return null;
         }
 
-        return TreeFloodFill.findTree(level, pos, null);
+        final TreeResult tree = TreeFloodFill.findTree(level, pos, null);
+        if (tree == null || (!TreePhysicsSettings.ALLOW_LOWER_BLOCK_FELLING && isLowerBlockTarget(level, pos, tree))) {
+            return null;
+        }
+
+        return tree;
     }
 
     public static boolean tryFell(final Level level, final Player player, final BlockPos pos, final BlockState minedState) {
@@ -44,7 +50,7 @@ public final class TreeFelling {
             return false;
         }
 
-        final TreeResult tree = TreeFloodFill.findTree(level, pos, null);
+        final TreeResult tree = findTreeTarget(level, pos);
         if (tree == null) {
             return false;
         }
@@ -58,8 +64,31 @@ public final class TreeFelling {
             level.setBlock(leafPos, air, 3);
         }
         for (final BlockPos logPos : tree.logs()) {
+            if (TreePhysicsSettings.BREAK_CUT_BLOCK && logPos.equals(pos)) {
+                Block.dropResources(minedState, level, pos, null, player, player.getMainHandItem());
+                level.setBlock(logPos, air, 3);
+                continue;
+            }
             level.setBlock(logPos, air, 3);
         }
         return true;
+    }
+
+    private static boolean isLowerBlockTarget(final Level level, final BlockPos cutPos, final TreeResult tree) {
+        return isGroundedLog(level, cutPos) || !hasFallingLogAbove(cutPos, tree);
+    }
+
+    private static boolean isGroundedLog(final Level level, final BlockPos pos) {
+        final BlockState below = level.getBlockState(pos.below());
+        return TreeUtil.isRoot(below) || TreeUtil.canBeRoot(below);
+    }
+
+    private static boolean hasFallingLogAbove(final BlockPos cutPos, final TreeResult tree) {
+        for (final BlockPos logPos : tree.logs()) {
+            if (logPos.getY() > cutPos.getY()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

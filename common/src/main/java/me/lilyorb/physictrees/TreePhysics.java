@@ -4,33 +4,42 @@ import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public final class TreePhysics {
-    private static final int FORCE_TICKS = 8;
-    private static final double TOTAL_ANGULAR_NUDGE = 1.1D;
+    private static final String FALLING_TREE_TAG = "physictrees_falling_tree";
+    private static final int FORCE_TICKS = 2;
+    private static final double BASE_ANGULAR_NUDGE = 2.0D;
+    private static final double BASE_UPWARD_NUDGE = 2.1D;
+    private static final double LOG_FORCE_AMPLITUDE = 0.7D;
+    private static final double LEAF_FORCE_AMPLITUDE = 0.6D;
+    private static final double COUNTER_IMPULSE_RATIO = 0.25D;
     private static final List<PendingFallForce> PENDING_FALL_FORCES = new ArrayList<>();
 
     private TreePhysics() {
     }
 
     public static boolean spawnFallingTree(final ServerLevel level, final Player player, final BlockPos cutPos, final TreeResult tree) {
+        final Set<BlockPos> logs = new HashSet<>(tree.logs());
+        if (TreePhysicsSettings.BREAK_CUT_BLOCK) {
+            logs.remove(cutPos);
+        }
+
         final Set<BlockPos> blocks = new HashSet<>(tree.logs().size() + tree.leaves().size());
-        blocks.addAll(tree.logs());
+        blocks.addAll(logs);
         blocks.addAll(tree.leaves());
         if (blocks.isEmpty()) {
             return false;
@@ -40,10 +49,23 @@ public final class TreePhysics {
         if (subLevel == null) {
             return false;
         }
+        markFallingTreeSubLevel(subLevel);
 
         clearOriginalBlocks(level, blocks);
-        queueFallForce(level, player, cutPos, blocks, subLevel);
+        if (TreePhysicsSettings.BREAK_CUT_BLOCK) {
+            breakCutBlock(level, player, cutPos);
+            System.out.println("break cut");
+        }
+        queueFallForce(level, player, cutPos, logs, tree, subLevel);
         return true;
+    }
+
+    public static boolean isFallingTreeSubLevel(final SubLevel subLevel) {
+        if (subLevel instanceof final ServerSubLevel serverSubLevel) {
+            final CompoundTag tag = serverSubLevel.getUserDataTag();
+            return tag != null && tag.getBoolean(FALLING_TREE_TAG);
+        }
+        return subLevel != null;
     }
 
     public static void tick(final MinecraftServer server) {
@@ -72,18 +94,36 @@ public final class TreePhysics {
         }
     }
 
-    private static void queueFallForce(final ServerLevel level, final Player player, final BlockPos cutPos, final Set<BlockPos> blocks, final ServerSubLevel subLevel) {
-        final Vec3 sideFromCutToPlayer = player.getEyePosition().subtract(cutPos.getCenter()).multiply(1.0D, 0.0D, 1.0D);
-        final Vec3 fallbackSide = player.getLookAngle().multiply(-1.0D, 0.0D, -1.0D);
-        final Vec3 cutSide = chooseCutSide(sideFromCutToPlayer, fallbackSide);
-        final Vector3d towardPlayer = new Vector3d(cutSide.x, 0.0D, cutSide.z).normalize();
-        final Vector3d fallDirection = new Vector3d(-towardPlayer.z, 0.0D, towardPlayer.x).normalize();
-        final Vector3d angularVelocity = new Vector3d(0.0D, 1.0D, 0.0D).cross(fallDirection, new Vector3d()).mul(TOTAL_ANGULAR_NUDGE / FORCE_TICKS);
-        final Vec3 center = findBlockCenter(blocks, cutPos);
-        final Vec3 cutAnchor = cutPos.getCenter();
-        final Vector3d anchorOffset = new Vector3d(cutAnchor.x - center.x, cutAnchor.y - center.y, cutAnchor.z - center.z);
-        final Vector3d linearVelocity = angularVelocity.cross(anchorOffset, new Vector3d()).negate();
-        final PendingFallForce force = new PendingFallForce(level, subLevel, linearVelocity, angularVelocity, FORCE_TICKS);
+    private static void breakCutBlock(final ServerLevel level, final Player player, final BlockPos cutPos) {
+        final BlockState state = level.getBlockState(cutPos);
+        Block.dropResources(state, level, cutPos, level.getBlockEntity(cutPos), player, player.getMainHandItem());
+        level.setBlock(cutPos, Blocks.AIR.defaultBlockState(), 3);
+    }
+
+    private static void markFallingTreeSubLevel(final ServerSubLevel subLevel) {
+        final CompoundTag tag = subLevel.getUserDataTag() == null ? new CompoundTag() : subLevel.getUserDataTag();
+        tag.putBoolean(FALLING_TREE_TAG, true);
+        subLevel.setUserDataTag(tag);
+    }
+
+    private static void queueFallForce(final ServerLevel level, final Player player, final BlockPos cutPos, final Set<BlockPos> logs, final TreeResult tree, final ServerSubLevel subLevel) {
+        final Vec3 sideFromPlayerToCut = cutPos.getCenter().subtract(player.getEyePosition()).multiply(1.0D, 0.0D, 1.0D);
+        final Vec3 fallbackSide = player.getLookAngle().multiply(1.0D, 0.0D, 1.0D);
+        final Vec3 cutSide = snapToCardinal(chooseCutSide(sideFromPlayerToCut, fallbackSide));
+        final Vector3d fallDirection = new Vector3d(cutSide.x, 0.0D, cutSide.z).normalize();
+
+        final Vector3d topImpulsePosition = findTopImpulsePoint(logs, cutPos, subLevel);
+        final Vector3d baseImpulsePosition = toSubLevelPosition(cutPos, cutPos, subLevel);
+        final double forceScale = getForceScale(tree);
+        final double angularNudge = BASE_ANGULAR_NUDGE + forceScale;
+        final double upwardNudge = TreePhysicsSettings.BREAK_CUT_BLOCK ? 0.0D : BASE_UPWARD_NUDGE * forceScale;
+        final Vector3d topImpulse = new Vector3d(fallDirection).mul(angularNudge / FORCE_TICKS);
+        topImpulse.y += upwardNudge / FORCE_TICKS;
+        final Vector3d baseCounterImpulse = new Vector3d(fallDirection)
+                .mul(-angularNudge * (TreePhysicsSettings.BREAK_CUT_BLOCK ? COUNTER_IMPULSE_RATIO * -0.1 : COUNTER_IMPULSE_RATIO)
+                        / FORCE_TICKS);
+
+        final PendingFallForce force = new PendingFallForce(level, subLevel, topImpulsePosition, topImpulse, baseImpulsePosition, baseCounterImpulse, FORCE_TICKS);
         applyForceStep(force);
         force.remainingTicks--;
         if (force.remainingTicks > 0) {
@@ -91,28 +131,34 @@ public final class TreePhysics {
         }
     }
 
-    private static void applyForceStep(final PendingFallForce force) {
-        final RigidBodyHandle handle = SubLevelPhysicsSystem.get(force.level).getPhysicsHandle(force.subLevel);
-        handle.addLinearAndAngularVelocity(new Vector3d(force.linearVelocity), new Vector3d(force.angularVelocity));
+    private static double getForceScale(final TreeResult tree) {
+        return tree.logs().size() * LOG_FORCE_AMPLITUDE + tree.leaves().size() * LEAF_FORCE_AMPLITUDE;
     }
 
-    private static Vec3 findBlockCenter(final Set<BlockPos> blocks, final BlockPos cutPos) {
-        double x = 0.0D;
-        double y = 0.0D;
-        double z = 0.0D;
-        int count = 0;
+    private static Vector3d blockCenter(final BlockPos pos) {
+        return new Vector3d(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+    }
 
-        for (final BlockPos pos : blocks) {
-            x += pos.getX() + 0.5D;
-            y += pos.getY() + 0.5D;
-            z += pos.getZ() + 0.5D;
-            count++;
+    private static void applyForceStep(final PendingFallForce force) {
+        final RigidBodyHandle handle = SubLevelPhysicsSystem.get(force.level).getPhysicsHandle(force.subLevel);
+        handle.applyImpulseAtPoint(new Vector3d(force.topImpulsePosition), new Vector3d(force.topImpulse));
+        handle.applyImpulseAtPoint(new Vector3d(force.baseImpulsePosition), new Vector3d(force.baseCounterImpulse));
+    }
+
+    private static Vector3d findTopImpulsePoint(final Set<BlockPos> logs, final BlockPos cutPos, final ServerSubLevel subLevel) {
+        BlockPos highest = cutPos;
+        for (final BlockPos pos : logs) {
+            if (pos.getY() > highest.getY()) {
+                highest = pos;
+            }
         }
 
-        if (count == 0) {
-            return cutPos.getCenter();
-        }
-        return new Vec3(x / count, y / count, z / count);
+        return toSubLevelPosition(highest, cutPos, subLevel);
+    }
+
+    private static Vector3d toSubLevelPosition(final BlockPos worldPos, final BlockPos cutPos, final ServerSubLevel subLevel) {
+        final Vector3d worldOffsetFromCut = blockCenter(worldPos).sub(blockCenter(cutPos), new Vector3d());
+        return blockCenter(subLevel.getPlot().getCenterBlock()).add(worldOffsetFromCut);
     }
 
     private static Vec3 chooseCutSide(final Vec3 sideFromCutToPlayer, final Vec3 fallbackSide) {
@@ -125,18 +171,29 @@ public final class TreePhysics {
         return new Vec3(0.0D, 0.0D, 1.0D);
     }
 
+    private static Vec3 snapToCardinal(final Vec3 direction) {
+        if (Math.abs(direction.x) >= Math.abs(direction.z)) {
+            return new Vec3(Math.signum(direction.x), 0.0D, 0.0D);
+        }
+        return new Vec3(0.0D, 0.0D, Math.signum(direction.z));
+    }
+
     private static final class PendingFallForce {
         private final ServerLevel level;
         private final ServerSubLevel subLevel;
-        private final Vector3d linearVelocity;
-        private final Vector3d angularVelocity;
+        private final Vector3d topImpulsePosition;
+        private final Vector3d topImpulse;
+        private final Vector3d baseImpulsePosition;
+        private final Vector3d baseCounterImpulse;
         private int remainingTicks;
 
-        private PendingFallForce(final ServerLevel level, final ServerSubLevel subLevel, final Vector3d linearVelocity, final Vector3d angularVelocity, final int remainingTicks) {
+        private PendingFallForce(final ServerLevel level, final ServerSubLevel subLevel, final Vector3d topImpulsePosition, final Vector3d topImpulse, final Vector3d baseImpulsePosition, final Vector3d baseCounterImpulse, final int remainingTicks) {
             this.level = level;
             this.subLevel = subLevel;
-            this.linearVelocity = linearVelocity;
-            this.angularVelocity = angularVelocity;
+            this.topImpulsePosition = topImpulsePosition;
+            this.topImpulse = topImpulse;
+            this.baseImpulsePosition = baseImpulsePosition;
+            this.baseCounterImpulse = baseCounterImpulse;
             this.remainingTicks = remainingTicks;
         }
     }
