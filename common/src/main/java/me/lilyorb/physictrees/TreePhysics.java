@@ -22,11 +22,11 @@ import java.util.*;
 public final class TreePhysics {
     private static final String FALLING_TREE_TAG = "physictrees_falling_tree";
     private static final int FORCE_TICKS = 2;
-    private static final double BASE_ANGULAR_NUDGE = 2.0D;
-    private static final double BASE_UPWARD_NUDGE = 2.1D;
-    private static final double LOG_FORCE_AMPLITUDE = 0.7D;
+    private static final double BASE_ANGULAR_NUDGE = 2.6D;
+    private static final double BASE_UPWARD_NUDGE = 0.2D;
+    private static final double LOG_FORCE_AMPLITUDE = 0.8D;
     private static final double LEAF_FORCE_AMPLITUDE = 0.6D;
-    private static final double COUNTER_IMPULSE_RATIO = 0.25D;
+    private static final double COUNTER_IMPULSE_RATIO = 0.18D;
     private static final List<PendingFallForce> PENDING_FALL_FORCES = new ArrayList<>();
 
     private TreePhysics() {
@@ -49,12 +49,11 @@ public final class TreePhysics {
         if (subLevel == null) {
             return false;
         }
-        markFallingTreeSubLevel(subLevel);
 
+        markFallingTreeSubLevel(subLevel);
         clearOriginalBlocks(level, blocks);
         if (TreePhysicsSettings.BREAK_CUT_BLOCK) {
             breakCutBlock(level, player, cutPos);
-            System.out.println("break cut");
         }
         queueFallForce(level, player, cutPos, logs, tree, subLevel);
         return true;

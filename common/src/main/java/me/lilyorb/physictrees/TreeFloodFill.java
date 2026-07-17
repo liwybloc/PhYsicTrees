@@ -69,43 +69,44 @@ public final class TreeFloodFill {
     }
 
     private static boolean hasValidPrimaryBase(final BlockGetter level, final BlockPos start, final Set<BlockPos> connectedLogs) {
-        final Set<BlockPos> remainingLogs = new HashSet<>(connectedLogs);
-        remainingLogs.remove(start);
-        final Set<BlockPos> visited = new HashSet<>();
-        boolean hasAnyGroundConnection = isGroundedLog(level, start);
+        final Set<BlockPos> primaryBaseLogs = collectDownwardBaseLogs(level, start, connectedLogs);
+        int groundedBaseLogs = 0;
 
-        for (final BlockPos log : remainingLogs) {
-            if (visited.contains(log)) {
+        for (final BlockPos log : connectedLogs) {
+            if (!isGroundedLog(level, log)) {
                 continue;
             }
 
-            final LogComponent component = collectLogComponent(level, log, remainingLogs, visited, start);
-            hasAnyGroundConnection |= component.grounded;
-            if (component.grounded && component.containsFallingLog) {
+            if (!primaryBaseLogs.contains(log)) {
+                return false;
+            }
+
+            groundedBaseLogs++;
+            if (groundedBaseLogs > 1) {
                 return false;
             }
         }
 
-        return hasAnyGroundConnection;
+        return groundedBaseLogs == 1;
     }
 
-    private static LogComponent collectLogComponent(final BlockGetter level, final BlockPos start, final Set<BlockPos> allowedLogs, final Set<BlockPos> visited, final BlockPos cutPos) {
+    private static Set<BlockPos> collectDownwardBaseLogs(final BlockGetter level, final BlockPos start, final Set<BlockPos> connectedLogs) {
+        final Set<BlockPos> visited = new HashSet<>();
         final ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         final BlockPos immutableStart = start.immutable();
         queue.add(immutableStart);
         visited.add(immutableStart);
-        boolean grounded = false;
-        boolean containsFallingLog = false;
 
         while (!queue.isEmpty()) {
             final BlockPos current = queue.removeFirst();
-            grounded |= isGroundedLog(level, current);
-            containsFallingLog |= current.getY() >= cutPos.getY();
-
             final BlockState currentState = level.getBlockState(current);
             for (final BlockPos offset : LOG_NEIGHBORS) {
+                if (offset.getY() >= 0) {
+                    continue;
+                }
+
                 final BlockPos next = current.offset(offset);
-                if (!allowedLogs.contains(next) || visited.contains(next)) {
+                if (!connectedLogs.contains(next) || visited.contains(next)) {
                     continue;
                 }
 
@@ -118,7 +119,7 @@ public final class TreeFloodFill {
             }
         }
 
-        return new LogComponent(grounded, containsFallingLog);
+        return visited;
     }
 
     private static boolean isGroundedLog(final BlockGetter level, final BlockPos log) {
@@ -441,8 +442,5 @@ public final class TreeFloodFill {
     }
 
     private record LeafSearchNode(BlockPos pos, int distance) {
-    }
-
-    private record LogComponent(boolean grounded, boolean containsFallingLog) {
     }
 }

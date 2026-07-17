@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "me.lilyorb.physictrees.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "LeavesBlockMixin",
+    "ServerPlayerGameModeMixin"
+  ],
+  "client": [
+    "MultiPlayerGameModeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

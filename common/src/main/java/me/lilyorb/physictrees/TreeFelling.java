@@ -37,12 +37,11 @@ public final class TreeFelling {
             return null;
         }
 
-        final TreeResult tree = TreeFloodFill.findTree(level, pos, null);
-        if (tree == null || (!TreePhysicsSettings.ALLOW_LOWER_BLOCK_FELLING && isLowerBlockTarget(level, pos, tree))) {
+        if (!TreePhysicsSettings.ALLOW_LOWER_BLOCK_FELLING && isLowerBlockTarget(level, pos)) {
             return null;
         }
 
-        return tree;
+        return TreeFloodFill.findTree(level, pos, null);
     }
 
     public static boolean tryFell(final Level level, final Player player, final BlockPos pos, final BlockState minedState) {
@@ -65,7 +64,7 @@ public final class TreeFelling {
         }
         for (final BlockPos logPos : tree.logs()) {
             if (TreePhysicsSettings.BREAK_CUT_BLOCK && logPos.equals(pos)) {
-                Block.dropResources(minedState, level, pos, null, player, player.getMainHandItem());
+                Block.dropResources(minedState, level, pos, level.getBlockEntity(pos), player, player.getMainHandItem());
                 level.setBlock(logPos, air, 3);
                 continue;
             }
@@ -74,21 +73,9 @@ public final class TreeFelling {
         return true;
     }
 
-    private static boolean isLowerBlockTarget(final Level level, final BlockPos cutPos, final TreeResult tree) {
-        return isGroundedLog(level, cutPos) || !hasFallingLogAbove(cutPos, tree);
-    }
-
-    private static boolean isGroundedLog(final Level level, final BlockPos pos) {
+    private static boolean isLowerBlockTarget(final Level level, final BlockPos pos) {
         final BlockState below = level.getBlockState(pos.below());
         return TreeUtil.isRoot(below) || TreeUtil.canBeRoot(below);
     }
 
-    private static boolean hasFallingLogAbove(final BlockPos cutPos, final TreeResult tree) {
-        for (final BlockPos logPos : tree.logs()) {
-            if (logPos.getY() > cutPos.getY()) {
-                return true;
-            }
-        }
-        return false;
-    }
 }
