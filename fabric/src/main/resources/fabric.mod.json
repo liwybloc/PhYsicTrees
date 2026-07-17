@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "me.lilyorb.physictrees.PhYsicTreesFabric"
+    ],
+    "client": [
+      "me.lilyorb.physictrees.PhYsicTreesFabricClient"
     ]
   },
   "depends": {
