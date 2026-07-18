@@ -1,4 +1,4 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.tree;
 
 import net.minecraft.core.BlockPos;
 

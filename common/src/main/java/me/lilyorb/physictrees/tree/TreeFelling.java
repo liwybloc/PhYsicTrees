@@ -1,5 +1,7 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.tree;
 
+import me.lilyorb.physictrees.physics.TreePhysics;
+import me.lilyorb.physictrees.physics.TreePhysicsSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -38,7 +40,7 @@ public final class TreeFelling {
             return null;
         }
 
-        if (!TreePhysicsSettings.ALLOW_LOWER_BLOCK_FELLING && isLowerBlockTarget(level, pos)) {
+        if (!TreePhysicsSettings.allowLowerBlockFelling() && isLowerBlockTarget(level, pos)) {
             return null;
         }
 
@@ -64,7 +66,7 @@ public final class TreeFelling {
             level.setBlock(leafPos, air, 3);
         }
         for (final BlockPos logPos : tree.logs()) {
-            if (TreePhysicsSettings.BREAK_CUT_BLOCK && logPos.equals(pos)) {
+            if (TreePhysicsSettings.breakCutBlock() && logPos.equals(pos)) {
                 Block.dropResources(minedState, level, pos, level.getBlockEntity(pos), player, player.getMainHandItem());
                 level.setBlock(logPos, air, 3);
                 continue;

@@ -1,6 +1,7 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.physics;
 
 import dev.ryanhcode.sable.physics.callback.FragileBlockCallback;
+import me.lilyorb.physictrees.tree.TreeUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3d;

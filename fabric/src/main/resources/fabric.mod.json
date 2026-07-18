@@ -11,10 +11,10 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "me.lilyorb.physictrees.PhYsicTreesFabric"
+      "me.lilyorb.physictrees.fabric.PhYsicTreesFabric"
     ],
     "client": [
-      "me.lilyorb.physictrees.PhYsicTreesFabricClient"
+      "me.lilyorb.physictrees.fabric.PhYsicTreesFabricClient"
     ]
   },
   "mixins": [

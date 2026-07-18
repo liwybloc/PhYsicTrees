@@ -1,4 +1,4 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.physics;
 
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.physics.callback.BlockSubLevelCollisionCallback;
@@ -28,22 +28,24 @@ public final class TreeLogCollisionCallback implements BlockSubLevelCollisionCal
 
         final ServerSubLevel subLevel = findImpactedSubLevel(system.getLevel(), pos, hitPos);
         if (subLevel != null) {
-            TreePhysics.markFallingTreeImpacted(subLevel);
-            if (isGroundImpact(system.getLevel(), otherHitBlockPos)) {
-                TreePhysics.queueGroundImpactParticles(system.getLevel(), subLevel, pos, hitPos);
+            final ServerLevel level = subLevel.getLevel();
+            final BlockState collidedState = getCollidedState(level, otherHitBlockPos);
+            if (collidedState != null) {
+                TreePhysics.queueBlockImpactParticles(level, subLevel, pos, hitPos, collidedState, otherHitBlockPos);
+                TreePhysics.markFallingTreeImpacted(subLevel);
             }
         }
 
         return CollisionResult.NONE;
     }
 
-    private static boolean isGroundImpact(final ServerLevel level, final @Nullable BlockPos otherHitBlockPos) {
+    private static @Nullable BlockState getCollidedState(final ServerLevel level, final @Nullable BlockPos otherHitBlockPos) {
         if (otherHitBlockPos == null || !level.hasChunkAt(otherHitBlockPos)) {
-            return false;
+            return null;
         }
 
         final BlockState state = level.getBlockState(otherHitBlockPos);
-        return state.is(BlockTags.DIRT);
+        return state.isAir() || !state.isSolid() || state.is(BlockTags.LEAVES) || state.is(BlockTags.LOGS) ? null : state;
     }
 
     private static @Nullable ServerSubLevel findImpactedSubLevel(final ServerLevel level, final BlockPos pos, final Vector3d hitPos) {

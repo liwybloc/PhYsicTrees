@@ -1,6 +1,6 @@
 package me.lilyorb.physictrees.mixin;
 
-import me.lilyorb.physictrees.FallingTreeMining;
+import me.lilyorb.physictrees.physics.FallingTreeMining;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -11,6 +11,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -32,12 +33,22 @@ public abstract class ServerPlayerGameModeMixin {
     private int destroyProgressStart;
 
     @Shadow
-    private int lastSentState;
+    private boolean isDestroyingBlock;
 
-    @Inject(method = "incrementDestroyProgress", at = @At("RETURN"), cancellable = true)
-    private void physictrees$applyFallingTreeBreakProgress(final BlockState state, final BlockPos pos, final int startTick, final CallbackInfoReturnable<Float> callback) {
-        if (FallingTreeMining.isFallingTreeLog(this.level, pos, state)) {
-            callback.setReturnValue(Math.min(1.0F, callback.getReturnValueF() + FallingTreeMining.breakProgress(this.level, pos, state)));
+    @Shadow
+    public abstract boolean destroyBlock(BlockPos pos);
+
+    @Inject(method = "incrementDestroyProgress", at = @At("RETURN"))
+    private void physictrees$finishSeededFallingTreeBreak(final BlockState state, final BlockPos pos, final int startTick, final CallbackInfoReturnable<Float> callback) {
+        final float progress = FallingTreeMining.breakProgress(this.level, pos, state);
+        if (progress <= 0.0F) {
+            return;
+        }
+
+        if (callback.getReturnValueF() >= 1.0F) {
+            this.isDestroyingBlock = false;
+            this.level.destroyBlockProgress(this.player.getId(), pos, -1);
+            this.destroyBlock(pos);
         }
     }
 
@@ -53,14 +64,17 @@ public abstract class ServerPlayerGameModeMixin {
             return;
         }
 
-        final int stage = Math.clamp((int) Math.floor(progress * 10.0F), 0, 9);
-        final float rawDestroyProgress = state.getDestroyProgress(this.player, this.player.level(), pos);
-        if (rawDestroyProgress > 0.0F) {
-            final int seededTicks = Math.max(0, (int) Math.floor(progress / rawDestroyProgress) - 1);
-            this.destroyProgressStart = Math.min(this.destroyProgressStart, this.gameTicks - seededTicks);
+        this.destroyProgressStart = physictrees$seededStartTick(state, pos, this.destroyProgressStart, progress);
+    }
+
+    @Unique
+    private int physictrees$seededStartTick(final BlockState state, final BlockPos pos, final int startTick, final float progress) {
+        final float perTick = state.getDestroyProgress(this.player, this.player.level(), pos);
+        if (progress <= 0.0F || perTick <= 0.0F) {
+            return startTick;
         }
 
-        this.lastSentState = Math.max(this.lastSentState, stage);
-        this.level.destroyBlockProgress(this.player.getId(), pos, stage);
+        final int seededTicks = Math.max(0, (int) Math.floor(progress / perTick) - 1);
+        return Math.min(startTick, this.gameTicks - seededTicks);
     }
 }

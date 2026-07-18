@@ -1,14 +1,19 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.neoforge;
 
+import me.lilyorb.physictrees.client.particle.CollisionDustParticle;
+import me.lilyorb.physictrees.particle.PhysicsParticles;
+import me.lilyorb.physictrees.tree.TreeFelling;
+import me.lilyorb.physictrees.tree.TreeResult;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
-import static me.lilyorb.physictrees.Constants.*;
+import static me.lilyorb.physictrees.core.Constants.*;
 
 public final class PhYsicTreesNeoForgeClient {
 
@@ -17,6 +22,10 @@ public final class PhYsicTreesNeoForgeClient {
     private static TreeResult cachedTreeResult;
 
     private PhYsicTreesNeoForgeClient() {
+    }
+
+    public static void registerParticles(final RegisterParticleProvidersEvent event) {
+        event.registerSpriteSet(PhysicsParticles.COLLISION_DUST, sprites -> new CollisionDustParticle.Provider(sprites));
     }
 
     public static void renderAxeIndicator(final RenderGuiEvent.Post event) {

@@ -1,4 +1,4 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.tree;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -63,7 +63,7 @@ public final class TreeFloodFill {
         }
 
         protectNearbyForeignTreeLeaves(level, result.logs(), connectedLogs, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ);
-        collectLeaves(level, result, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ);
+        collectLeaves(level, result, protectedLeaves, start.getY(), minX, minY, minZ, maxX, maxY, maxZ);
         pruneDistantAttachedLeaves(level, result, connectedLogs);
         return result.isValid() ? result : null;
     }
@@ -247,7 +247,7 @@ public final class TreeFloodFill {
             if (isWithinLeafBounds(leafPos, minX, minY, minZ, maxX, maxY, maxZ)
                     && visitedLeaves.add(leafPos.immutable())
                     && isCollectableLeaf(level.getBlockState(leafPos))) {
-                queue.add(new LeafSearchNode(leafPos.immutable(), nextDistance));
+                queue.add(new LeafSearchNode(leafPos.immutable(), nextDistance, false));
             }
         }
     }
@@ -312,12 +312,12 @@ public final class TreeFloodFill {
         }
     }
 
-    private static void collectLeaves(final BlockGetter level, final TreeResult result, final Set<BlockPos> protectedLeaves, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ) {
+    private static void collectLeaves(final BlockGetter level, final TreeResult result, final Set<BlockPos> protectedLeaves, final int cutY, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ) {
         final Set<BlockPos> visitedLeaves = new HashSet<>();
         final ArrayDeque<LeafSearchNode> queue = new ArrayDeque<>();
 
         for (final BlockPos logPos : result.logs()) {
-            checkNeighborLeafBounds(level, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, logPos, 1);
+            checkNeighborLeafBounds(level, protectedLeaves, cutY, logPos.getY() > cutY, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, logPos, 1);
         }
 
         while (!queue.isEmpty()) {
@@ -333,23 +333,28 @@ public final class TreeFloodFill {
 
             result.addLeaf(current.pos);
             result.setLeafConnectionDistance(current.pos, current.distance);
-            checkNeighborLeafBounds(level, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, current.pos, current.distance + 1);
+            checkNeighborLeafBounds(level, protectedLeaves, cutY, current.wentAboveCutY, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, current.pos, current.distance + 1);
         }
     }
 
-    private static void checkNeighborLeafBounds(final BlockGetter level, final Set<BlockPos> protectedLeaves, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ, final Set<BlockPos> visitedLeaves, final ArrayDeque<LeafSearchNode> queue, final BlockPos sourcePos, final int nextDistance) {
+    private static void checkNeighborLeafBounds(final BlockGetter level, final Set<BlockPos> protectedLeaves, final int cutY, final boolean sourceWentAboveCutY, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ, final Set<BlockPos> visitedLeaves, final ArrayDeque<LeafSearchNode> queue, final BlockPos sourcePos, final int nextDistance) {
         if (nextDistance > MAX_LEAF_CONNECTION_DISTANCE) {
             return;
         }
 
         for (final Direction direction : CARDINAL_DIRECTIONS) {
             final BlockPos leafPos = sourcePos.relative(direction);
+            final boolean wentAboveCutY = sourceWentAboveCutY || leafPos.getY() > cutY;
+            if (leafPos.getY() < cutY && !wentAboveCutY) {
+                continue;
+            }
+
             if (isWithinLeafBounds(leafPos, minX, minY, minZ, maxX, maxY, maxZ)
                     && !protectedLeaves.contains(leafPos)
                     && visitedLeaves.add(leafPos.immutable())
                     && isCollectableLeaf(level.getBlockState(leafPos))) {
                 final BlockPos immutableLeafPos = leafPos.immutable();
-                queue.add(new LeafSearchNode(immutableLeafPos, nextDistance));
+                queue.add(new LeafSearchNode(immutableLeafPos, nextDistance, wentAboveCutY));
             }
         }
     }
@@ -441,7 +446,7 @@ public final class TreeFloodFill {
     private record ClosestLogs(BlockPos mainLog, BlockPos foreignLog, int distance) {
     }
 
-    private record LeafSearchNode(BlockPos pos, int distance) {
+    private record LeafSearchNode(BlockPos pos, int distance, boolean wentAboveCutY) {
     }
 
     private record LogComponent(Set<BlockPos> logs, boolean grounded, int highestY) {

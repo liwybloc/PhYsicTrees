@@ -2,8 +2,8 @@ package me.lilyorb.physictrees.mixin;
 
 import dev.ryanhcode.sable.api.block.BlockWithSubLevelCollisionCallback;
 import dev.ryanhcode.sable.api.physics.callback.BlockSubLevelCollisionCallback;
-import me.lilyorb.physictrees.TreeLogCollisionCallback;
-import me.lilyorb.physictrees.TreeUtil;
+import me.lilyorb.physictrees.physics.TreeLogCollisionCallback;
+import me.lilyorb.physictrees.tree.TreeUtil;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

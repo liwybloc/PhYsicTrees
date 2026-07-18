@@ -1,6 +1,11 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.fabric;
 
+import me.lilyorb.physictrees.client.particle.CollisionDustParticle;
+import me.lilyorb.physictrees.particle.PhysicsParticles;
+import me.lilyorb.physictrees.tree.TreeFelling;
+import me.lilyorb.physictrees.tree.TreeResult;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.particle.v1.ParticleFactoryRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -9,7 +14,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
-import static me.lilyorb.physictrees.Constants.*;
+import static me.lilyorb.physictrees.core.Constants.*;
 
 public final class PhYsicTreesFabricClient implements ClientModInitializer {
 
@@ -19,6 +24,7 @@ public final class PhYsicTreesFabricClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        ParticleFactoryRegistry.getInstance().register(PhysicsParticles.COLLISION_DUST, CollisionDustParticle.Provider::new);
         HudRenderCallback.EVENT.register((guiGraphics, tickCounter) -> renderAxeIndicator(guiGraphics));
     }
 

@@ -1,5 +1,6 @@
-package me.lilyorb.physictrees;
+package me.lilyorb.physictrees.tree;
 
+import me.lilyorb.physictrees.core.Constants;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
