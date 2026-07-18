@@ -8,10 +8,9 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
+import static me.lilyorb.physictrees.Constants.*;
+
 public final class PhYsicTreesNeoForgeClient {
-    private static final int ICON_SIZE = 8;
-    private static final int ICON_COLOR = 0xE0D18B2A;
-    private static final int ICON_OUTLINE = 0xE02B1A08;
 
     private static BlockPos cachedTargetPos;
     private static long cachedTargetTick = Long.MIN_VALUE;

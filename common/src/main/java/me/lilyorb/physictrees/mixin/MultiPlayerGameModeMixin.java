@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -32,6 +33,7 @@ public abstract class MultiPlayerGameModeMixin {
         seedDestroyProgress(pos);
     }
 
+    @Unique
     private void seedDestroyProgress(final BlockPos pos) {
         if (this.minecraft.level == null) {
             return;
@@ -39,7 +41,7 @@ public abstract class MultiPlayerGameModeMixin {
 
         final BlockState state = this.minecraft.level.getBlockState(pos);
         if (FallingTreeMining.isFallingTreeLog(this.minecraft.level, pos, state)) {
-            this.destroyProgress = Math.max(this.destroyProgress, FallingTreeMining.partialBreakProgress());
+            this.destroyProgress = Math.max(this.destroyProgress, FallingTreeMining.clientBreakProgress(this.minecraft.level, pos, state));
         }
     }
 }

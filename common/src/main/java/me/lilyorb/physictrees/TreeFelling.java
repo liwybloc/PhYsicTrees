@@ -17,8 +17,9 @@ public final class TreeFelling {
     }
 
     public static boolean hasValidHeldItem(final Player player) {
-        final ItemStack heldItem = player.getMainHandItem();
-        return heldItem.isEmpty() || heldItem.is(ItemTags.AXES);
+//        final ItemStack heldItem = player.getMainHandItem();
+//        return heldItem.isEmpty() || heldItem.is(ItemTags.AXES);
+        return true; // ignore frfr
     }
 
     public static boolean canFell(final Player player) {

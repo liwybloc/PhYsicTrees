@@ -1,5 +1,6 @@
 package me.lilyorb.physictrees;
 
+import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
@@ -7,7 +8,9 @@ import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
@@ -16,18 +19,28 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
+import org.joml.Vector3f;
 
 import java.util.*;
 
 public final class TreePhysics {
     private static final String FALLING_TREE_TAG = "physictrees_falling_tree";
+    private static final String IMPACTED_TREE_TAG = "physictrees_impacted_tree";
+    private static final String FALLING_TREE_LOGS_TAG = "physictrees_falling_tree_logs";
+    private static final DustParticleOptions GROUND_IMPACT_PARTICLE = new DustParticleOptions(new Vector3f(0.651F, 0.627F, 0.494F), 1.0F);
+    private static final int COLLISION_DAMAGE_PROGRESS_ID_SALT = 0x50540000;
+    private static final int COLLISION_DAMAGE_REFRESH_TICKS = 20 * 30;
     private static final int FORCE_TICKS = 2;
-    private static final double BASE_ANGULAR_NUDGE = 2.6D;
+    private static final double BASE_ANGULAR_NUDGE = 1.0D;
     private static final double BASE_UPWARD_NUDGE = 0.2D;
     private static final double LOG_FORCE_AMPLITUDE = 0.8D;
-    private static final double LEAF_FORCE_AMPLITUDE = 0.6D;
+    private static final double LEAF_FORCE_AMPLITUDE = 0.8D;
     private static final double COUNTER_IMPULSE_RATIO = 0.18D;
     private static final List<PendingFallForce> PENDING_FALL_FORCES = new ArrayList<>();
+    private static final List<PendingGroundImpactParticle> PENDING_GROUND_IMPACT_PARTICLES = new ArrayList<>();
+    private static final Map<ServerSubLevel, Integer> COLLISION_DAMAGE_REFRESHES = new HashMap<>();
+    private static final Map<ServerSubLevel, Set<BlockPos>> GROUND_IMPACT_PARTICLE_LOGS = new HashMap<>();
+    private static final Map<ServerLevel, Set<BlockPos>> IMPACTED_LOG_POSITIONS = new IdentityHashMap<>();
 
     private TreePhysics() {
     }
@@ -50,7 +63,7 @@ public final class TreePhysics {
             return false;
         }
 
-        markFallingTreeSubLevel(subLevel);
+        markFallingTreeSubLevel(subLevel, logs, cutPos);
         clearOriginalBlocks(level, blocks);
         if (TreePhysicsSettings.BREAK_CUT_BLOCK) {
             breakCutBlock(level, player, cutPos);
@@ -65,6 +78,44 @@ public final class TreePhysics {
             return tag != null && tag.getBoolean(FALLING_TREE_TAG);
         }
         return subLevel != null;
+    }
+
+    public static boolean isImpactedFallingTreeSubLevel(final SubLevel subLevel) {
+        if (subLevel instanceof final ServerSubLevel serverSubLevel) {
+            final CompoundTag tag = serverSubLevel.getUserDataTag();
+            return tag != null && tag.getBoolean(FALLING_TREE_TAG) && tag.getBoolean(IMPACTED_TREE_TAG);
+        }
+        return false;
+    }
+
+    public static boolean isImpactedFallingTreeLog(final ServerLevel level, final BlockPos pos) {
+        final Set<BlockPos> logs = IMPACTED_LOG_POSITIONS.get(level);
+        return logs != null && logs.contains(pos);
+    }
+
+    public static void markFallingTreeImpacted(final ServerSubLevel subLevel) {
+        if (!isFallingTreeSubLevel(subLevel) || isImpactedFallingTreeSubLevel(subLevel)) {
+            return;
+        }
+
+        final CompoundTag tag = subLevel.getUserDataTag() == null ? new CompoundTag() : subLevel.getUserDataTag();
+        tag.putBoolean(IMPACTED_TREE_TAG, true);
+        subLevel.setUserDataTag(tag);
+        cacheImpactedLogPositions(subLevel);
+        COLLISION_DAMAGE_REFRESHES.put(subLevel, COLLISION_DAMAGE_REFRESH_TICKS);
+    }
+
+    public static void queueGroundImpactParticles(final ServerLevel level, final ServerSubLevel subLevel, final BlockPos logPos, final Vector3d hitPos) {
+        if (!isFallingTreeSubLevel(subLevel) || subLevel.isRemoved()) {
+            return;
+        }
+
+        final Set<BlockPos> impactedLogs = GROUND_IMPACT_PARTICLE_LOGS.computeIfAbsent(subLevel, key -> new HashSet<>());
+        final BlockPos immutableLogPos = logPos.immutable();
+        if (impactedLogs.add(immutableLogPos)) {
+            final Vector3d worldHitPos = Sable.HELPER.projectOutOfSubLevel(level, hitPos, new Vector3d());
+            PENDING_GROUND_IMPACT_PARTICLES.add(new PendingGroundImpactParticle(level, worldHitPos));
+        }
     }
 
     public static void tick(final MinecraftServer server) {
@@ -82,6 +133,9 @@ public final class TreePhysics {
                 iterator.remove();
             }
         }
+
+        refreshCollisionDamage();
+        flushGroundImpactParticles();
     }
 
     private static void clearOriginalBlocks(final ServerLevel level, final Set<BlockPos> blocks) {
@@ -99,10 +153,114 @@ public final class TreePhysics {
         level.setBlock(cutPos, Blocks.AIR.defaultBlockState(), 3);
     }
 
-    private static void markFallingTreeSubLevel(final ServerSubLevel subLevel) {
+    private static void markFallingTreeSubLevel(final ServerSubLevel subLevel, final Set<BlockPos> logs, final BlockPos cutPos) {
         final CompoundTag tag = subLevel.getUserDataTag() == null ? new CompoundTag() : subLevel.getUserDataTag();
         tag.putBoolean(FALLING_TREE_TAG, true);
+        tag.put(FALLING_TREE_LOGS_TAG, serializeSubLevelLogPositions(subLevel, logs, cutPos));
         subLevel.setUserDataTag(tag);
+    }
+
+    private static ListTag serializeSubLevelLogPositions(final ServerSubLevel subLevel, final Set<BlockPos> logs, final BlockPos cutPos) {
+        final ListTag serializedLogs = new ListTag();
+        for (final BlockPos log : logs) {
+            final BlockPos plotPos = log.subtract(cutPos);
+            final CompoundTag logTag = new CompoundTag();
+            logTag.putInt("x", plotPos.getX());
+            logTag.putInt("y", plotPos.getY());
+            logTag.putInt("z", plotPos.getZ());
+            serializedLogs.add(logTag);
+        }
+        return serializedLogs;
+    }
+
+    private static void refreshCollisionDamage() {
+        final Iterator<Map.Entry<ServerSubLevel, Integer>> iterator = COLLISION_DAMAGE_REFRESHES.entrySet().iterator();
+        while (iterator.hasNext()) {
+            final Map.Entry<ServerSubLevel, Integer> entry = iterator.next();
+            final ServerSubLevel subLevel = entry.getKey();
+            final int remainingTicks = entry.getValue();
+            if (subLevel.isRemoved()) {
+                removeImpactedLogPositions(subLevel);
+                GROUND_IMPACT_PARTICLE_LOGS.remove(subLevel);
+                clearCollisionDamage(subLevel);
+                iterator.remove();
+                continue;
+            }
+
+            if (remainingTicks <= 0) {
+                clearCollisionDamage(subLevel);
+                iterator.remove();
+                continue;
+            }
+
+            showCollisionDamage(subLevel);
+            entry.setValue(remainingTicks - 1);
+        }
+    }
+
+    private static void flushGroundImpactParticles() {
+        final Iterator<PendingGroundImpactParticle> iterator = PENDING_GROUND_IMPACT_PARTICLES.iterator();
+        while (iterator.hasNext()) {
+            final PendingGroundImpactParticle particle = iterator.next();
+            iterator.remove();
+            particle.level.sendParticles(
+                    GROUND_IMPACT_PARTICLE,
+                    particle.pos.x,
+                    particle.pos.y + 0.5D,
+                    particle.pos.z,
+                    60,
+                    0.8D,
+                    0.3D,
+                    0.8D,
+                    0.1D
+            );
+        }
+    }
+
+    private static void cacheImpactedLogPositions(final ServerSubLevel subLevel) {
+        final Set<BlockPos> logs = IMPACTED_LOG_POSITIONS.computeIfAbsent(subLevel.getLevel(), level -> new HashSet<>());
+        forEachStoredLogPosition(subLevel, logs::add);
+    }
+
+    private static void removeImpactedLogPositions(final ServerSubLevel subLevel) {
+        final Set<BlockPos> logs = IMPACTED_LOG_POSITIONS.get(subLevel.getLevel());
+        if (logs == null) {
+            return;
+        }
+
+        forEachStoredLogPosition(subLevel, logs::remove);
+        if (logs.isEmpty()) {
+            IMPACTED_LOG_POSITIONS.remove(subLevel.getLevel());
+        }
+    }
+
+    private static void showCollisionDamage(final ServerSubLevel subLevel) {
+        final int progress = Math.clamp((int) Math.floor(TreePhysicsSettings.COLLISION_BREAK_PROGRESS * 10.0D), 0, 9);
+        forEachStoredLogPosition(subLevel, pos -> subLevel.getLevel().destroyBlockProgress(collisionDamageProgressId(subLevel, pos), pos, progress));
+    }
+
+    private static void clearCollisionDamage(final ServerSubLevel subLevel) {
+        forEachStoredLogPosition(subLevel, pos -> subLevel.getLevel().destroyBlockProgress(collisionDamageProgressId(subLevel, pos), pos, -1));
+    }
+
+    private static void forEachStoredLogPosition(final ServerSubLevel subLevel, final java.util.function.Consumer<BlockPos> consumer) {
+        final CompoundTag tag = subLevel.getUserDataTag();
+        if (tag == null || !tag.contains(FALLING_TREE_LOGS_TAG)) {
+            return;
+        }
+
+        final BlockPos plotCenter = subLevel.getPlot().getCenterBlock();
+        final ListTag logs = tag.getList(FALLING_TREE_LOGS_TAG, CompoundTag.TAG_COMPOUND);
+        for (int index = 0; index < logs.size(); index++) {
+            final CompoundTag logTag = logs.getCompound(index);
+            final BlockPos relativePos = new BlockPos(logTag.getInt("x"), logTag.getInt("y"), logTag.getInt("z"));
+            final BlockPos plotPos = plotCenter.offset(relativePos);
+            consumer.accept(plotPos);
+        }
+    }
+
+    private static int collisionDamageProgressId(final ServerSubLevel subLevel, final BlockPos pos) {
+        return COLLISION_DAMAGE_PROGRESS_ID_SALT ^ subLevel.getRuntimeId() * 31 ^ pos.hashCode();
     }
 
     private static void queueFallForce(final ServerLevel level, final Player player, final BlockPos cutPos, final Set<BlockPos> logs, final TreeResult tree, final ServerSubLevel subLevel) {
@@ -119,7 +277,7 @@ public final class TreePhysics {
         final Vector3d topImpulse = new Vector3d(fallDirection).mul(angularNudge / FORCE_TICKS);
         topImpulse.y += upwardNudge / FORCE_TICKS;
         final Vector3d baseCounterImpulse = new Vector3d(fallDirection)
-                .mul(-angularNudge * (TreePhysicsSettings.BREAK_CUT_BLOCK ? COUNTER_IMPULSE_RATIO * -0.1 : COUNTER_IMPULSE_RATIO)
+                .mul(-angularNudge * (TreePhysicsSettings.BREAK_CUT_BLOCK ? COUNTER_IMPULSE_RATIO * 0 : COUNTER_IMPULSE_RATIO) // ignore my *0 chat it's for debug purposes i swear
                         / FORCE_TICKS);
 
         final PendingFallForce force = new PendingFallForce(level, subLevel, topImpulsePosition, topImpulse, baseImpulsePosition, baseCounterImpulse, FORCE_TICKS);
@@ -195,5 +353,8 @@ public final class TreePhysics {
             this.baseCounterImpulse = baseCounterImpulse;
             this.remainingTicks = remainingTicks;
         }
+    }
+
+    private record PendingGroundImpactParticle(ServerLevel level, Vector3d pos) {
     }
 }

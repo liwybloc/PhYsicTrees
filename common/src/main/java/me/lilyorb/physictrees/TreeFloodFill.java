@@ -31,7 +31,7 @@ public final class TreeFloodFill {
             return null;
         }
         final TreeResult result = new TreeResult();
-        if (!hasValidPrimaryBase(level, start, connectedLogs)) {
+        if (!hasValidFallingConnection(level, start, connectedLogs)) {
             return null;
         }
         result.markGrounded();
@@ -68,45 +68,45 @@ public final class TreeFloodFill {
         return result.isValid() ? result : null;
     }
 
-    private static boolean hasValidPrimaryBase(final BlockGetter level, final BlockPos start, final Set<BlockPos> connectedLogs) {
-        final Set<BlockPos> primaryBaseLogs = collectDownwardBaseLogs(level, start, connectedLogs);
-        int groundedBaseLogs = 0;
+    private static boolean hasValidFallingConnection(final BlockGetter level, final BlockPos start, final Set<BlockPos> connectedLogs) {
+        boolean hasGroundedBase = false;
+        final Set<BlockPos> visited = new HashSet<>();
 
         for (final BlockPos log : connectedLogs) {
-            if (!isGroundedLog(level, log)) {
+            if (log.equals(start) || visited.contains(log)) {
                 continue;
             }
 
-            if (!primaryBaseLogs.contains(log)) {
-                return false;
-            }
-
-            groundedBaseLogs++;
-            if (groundedBaseLogs > 1) {
-                return false;
+            final LogComponent component = collectLogComponent(level, log, start, connectedLogs);
+            visited.addAll(component.logs());
+            if (component.grounded()) {
+                hasGroundedBase = true;
+                if (component.reachesCutHeight(start.getY())) {
+                    return false;
+                }
             }
         }
 
-        return groundedBaseLogs == 1;
+        return hasGroundedBase || isGroundedLog(level, start);
     }
 
-    private static Set<BlockPos> collectDownwardBaseLogs(final BlockGetter level, final BlockPos start, final Set<BlockPos> connectedLogs) {
+    private static LogComponent collectLogComponent(final BlockGetter level, final BlockPos start, final BlockPos ignoredBrokenPos, final Set<BlockPos> connectedLogs) {
         final Set<BlockPos> visited = new HashSet<>();
         final ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         final BlockPos immutableStart = start.immutable();
         queue.add(immutableStart);
         visited.add(immutableStart);
+        boolean grounded = false;
+        int highestY = start.getY();
 
         while (!queue.isEmpty()) {
             final BlockPos current = queue.removeFirst();
+            grounded = grounded || isGroundedLog(level, current);
+            highestY = Math.max(highestY, current.getY());
             final BlockState currentState = level.getBlockState(current);
             for (final BlockPos offset : LOG_NEIGHBORS) {
-                if (offset.getY() >= 0) {
-                    continue;
-                }
-
                 final BlockPos next = current.offset(offset);
-                if (!connectedLogs.contains(next) || visited.contains(next)) {
+                if (isIgnored(next, ignoredBrokenPos) || !connectedLogs.contains(next) || visited.contains(next)) {
                     continue;
                 }
 
@@ -119,7 +119,7 @@ public final class TreeFloodFill {
             }
         }
 
-        return visited;
+        return new LogComponent(visited, grounded, highestY);
     }
 
     private static boolean isGroundedLog(final BlockGetter level, final BlockPos log) {
@@ -442,5 +442,11 @@ public final class TreeFloodFill {
     }
 
     private record LeafSearchNode(BlockPos pos, int distance) {
+    }
+
+    private record LogComponent(Set<BlockPos> logs, boolean grounded, int highestY) {
+        private boolean reachesCutHeight(final int cutY) {
+            return highestY >= cutY;
+        }
     }
 }
