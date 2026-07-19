@@ -2,6 +2,7 @@ package me.lilyorb.physictrees.mixin;
 
 import dev.ryanhcode.sable.api.block.BlockWithSubLevelCollisionCallback;
 import dev.ryanhcode.sable.api.physics.callback.BlockSubLevelCollisionCallback;
+import me.lilyorb.physictrees.physics.AttachedBlockCollisionCallback;
 import me.lilyorb.physictrees.physics.TreeLogCollisionCallback;
 import me.lilyorb.physictrees.tree.TreeUtil;
 import net.minecraft.world.level.block.state.BlockState;
@@ -22,6 +23,9 @@ public abstract class RapierVoxelColliderBakeryMixin {
     private BlockSubLevelCollisionCallback physictrees$getLogCollisionCallback(final BlockState state) {
         if (TreeUtil.isLog(state)) {
             return TreeLogCollisionCallback.INSTANCE;
+        }
+        if (TreeUtil.isAttachedBlock(state)) {
+            return AttachedBlockCollisionCallback.INSTANCE;
         }
 
         return BlockWithSubLevelCollisionCallback.sable$getCallback(state);

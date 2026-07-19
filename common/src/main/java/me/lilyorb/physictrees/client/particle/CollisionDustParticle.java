@@ -1,7 +1,7 @@
 package me.lilyorb.physictrees.client.particle;
 
 import me.lilyorb.physictrees.particle.CollisionDustParticleOptions;
-import me.lilyorb.physictrees.physics.TreePhysicsSettings;
+import me.lilyorb.physictrees.core.TreePhysicsSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.ParticleProvider;
@@ -55,7 +55,7 @@ public final class CollisionDustParticle extends TextureSheetParticle {
     @Override
     public int getLightColor(final float partialTick) {
         final int color = super.getLightColor(partialTick);
-        return color == 0 && this.level.hasChunkAt(this.pos) ? LevelRenderer.getLightColor(this.level, this.pos) : color;
+        return color == 0 && this.level.isLoaded(this.pos) ? LevelRenderer.getLightColor(this.level, this.pos) : color;
     }
 
     private void applyBlockColor(final ClientLevel level, final BlockState state) {
@@ -92,7 +92,11 @@ public final class CollisionDustParticle extends TextureSheetParticle {
         }
 
         @Override
-        public TextureSheetParticle createParticle(final CollisionDustParticleOptions options, final ClientLevel level, final double x, final double y, final double z, final double xSpeed, final double ySpeed, final double zSpeed) {
+        public TextureSheetParticle createParticle(
+                final @NotNull CollisionDustParticleOptions options,
+                final @NotNull ClientLevel level,
+                final double x, final double y, final double z,
+                final double xSpeed, final double ySpeed, final double zSpeed) {
             return new CollisionDustParticle(level, x, y, z, xSpeed, ySpeed, zSpeed, options, this.sprites);
         }
     }

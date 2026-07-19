@@ -1,15 +1,26 @@
-package me.lilyorb.physictrees.physics;
+package me.lilyorb.physictrees.core;
 
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
 public final class TreePhysicsSettings {
-    private TreePhysicsSettings() {
-    }
-
     public static boolean breakCutBlock() {
         return true;
     }
 
     public static boolean allowLowerBlockFelling() {
         return false;
+    }
+
+    public static boolean leafDecay() {
+        return true;
+    }
+
+    public static double leafDecayTicks() {
+        return 20;
+    }
+    public static double leafDecayTicksRandom() {
+        return 10;
     }
 
     public static double partialBreakProgress() {
@@ -21,35 +32,27 @@ public final class TreePhysicsSettings {
     }
 
     public static int collisionDamageRefreshTicks() {
-        return 20 * 30;
+        return 20 * 120;
     }
 
     public static int forceTicks() {
-        return 10;
-    }
-
-    public static double baseAngularNudge() {
-        return 1.3D;
+        return 2;
     }
 
     public static double baseUpwardNudge() {
         return 0.2D;
     }
 
-    public static double logForceAmplitude() {
-        return 1.2D;
-    }
-
-    public static double leafForceAmplitude() {
-        return 0.4D;
+    public static double getAngularMultiplier() {
+        return 2.67676767D;
     }
 
     public static double counterImpulseNoBreakRatio() {
-        return 0.18D;
+        return 0.17D;
     }
 
     public static double counterImpulseBreakRatio() {
-        return -0.08D;
+        return 0.0D;
     }
 
     public static double impactProbeDistance() {
@@ -85,11 +88,11 @@ public final class TreePhysicsSettings {
     }
 
     public static int collisionParticleLifetime() {
-        return 40;
+        return 20;
     }
 
     public static int collisionParticleLifetimeRandom() {
-        return 20;
+        return 10;
     }
 
     public static float collisionParticleAlpha() {
@@ -109,6 +112,6 @@ public final class TreePhysicsSettings {
     }
 
     public static double collisionParticleRandomUpwardSpeed() {
-        return 0.006D;
+        return 0.002D;
     }
 }

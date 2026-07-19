@@ -1,6 +1,7 @@
 package me.lilyorb.physictrees.mixin;
 
 import me.lilyorb.physictrees.physics.FallingTreeMining;
+import me.lilyorb.physictrees.physics.TreePhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -32,28 +33,35 @@ public abstract class ServerPlayerGameModeMixin {
     @Shadow
     private int destroyProgressStart;
 
-    @Shadow
-    private boolean isDestroyingBlock;
+    @Inject(method = "handleBlockBreakAction", at = @At("HEAD"))
+    private void physictrees$seedFallingTreeStopValidation(final BlockPos pos, final ServerboundPlayerActionPacket.Action action, final Direction direction, final int maxBuildHeight, final int sequence, final CallbackInfo callback) {
+        if (action != ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK) {
+            return;
+        }
 
-    @Shadow
-    public abstract boolean destroyBlock(BlockPos pos);
-
-    @Inject(method = "incrementDestroyProgress", at = @At("RETURN"))
-    private void physictrees$finishSeededFallingTreeBreak(final BlockState state, final BlockPos pos, final int startTick, final CallbackInfoReturnable<Float> callback) {
+        final BlockState state = this.level.getBlockState(pos);
         final float progress = FallingTreeMining.breakProgress(this.level, pos, state);
         if (progress <= 0.0F) {
             return;
         }
 
-        if (callback.getReturnValueF() >= 1.0F) {
-            this.isDestroyingBlock = false;
-            this.level.destroyBlockProgress(this.player.getId(), pos, -1);
-            this.destroyBlock(pos);
+        this.destroyProgressStart = physictrees$seededStartTick(state, pos, this.destroyProgressStart, progress);
+    }
+
+    @Inject(method = "incrementDestroyProgress", at = @At("RETURN"))
+    private void physictrees$keepCollisionDamageHiddenWhileMining(final BlockState state, final BlockPos pos, final int startTick, final CallbackInfoReturnable<Float> callback) {
+        if (FallingTreeMining.breakProgress(this.level, pos, state) > 0.0F) {
+            TreePhysics.suppressCollisionDamageWhileMining(this.level, pos);
         }
     }
 
     @Inject(method = "handleBlockBreakAction", at = @At("RETURN"))
-    private void physictrees$seedFallingTreeStartProgress(final BlockPos pos, final ServerboundPlayerActionPacket.Action action, final Direction direction, final int maxBuildHeight, final int sequence, final CallbackInfo callback) {
+    private void physictrees$handoffFallingTreeBreakProgress(final BlockPos pos, final ServerboundPlayerActionPacket.Action action, final Direction direction, final int maxBuildHeight, final int sequence, final CallbackInfo callback) {
+        if (action == ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK || action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK) {
+            TreePhysics.stopSuppressingCollisionDamageWhileMining(this.level, pos);
+            return;
+        }
+
         if (action != ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK) {
             return;
         }
@@ -64,6 +72,7 @@ public abstract class ServerPlayerGameModeMixin {
             return;
         }
 
+        TreePhysics.suppressCollisionDamageWhileMining(this.level, pos);
         this.destroyProgressStart = physictrees$seededStartTick(state, pos, this.destroyProgressStart, progress);
     }
 

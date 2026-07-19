@@ -53,6 +53,9 @@ neoForge {
 }
 
 dependencies {
+    compileOnly "org.projectlombok:lombok:${lombok_version}"
+    annotationProcessor "org.projectlombok:lombok:${lombok_version}"
+
     implementation "foundry.veil:veil-neoforge-${minecraft_version}:${veil_version}"
     implementation("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") {
         exclude group: 'foundry.veil'

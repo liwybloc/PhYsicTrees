@@ -1,23 +1,20 @@
 package me.lilyorb.physictrees.tree;
 
+import lombok.experimental.UtilityClass;
 import me.lilyorb.physictrees.physics.TreePhysics;
-import me.lilyorb.physictrees.physics.TreePhysicsSettings;
+import me.lilyorb.physictrees.core.TreePhysicsSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
+@UtilityClass
 public final class TreeFelling {
-    private TreeFelling() {
-    }
-
     public static boolean hasValidHeldItem(final Player player) {
 //        final ItemStack heldItem = player.getMainHandItem();
 //        return heldItem.isEmpty() || heldItem.is(ItemTags.AXES);

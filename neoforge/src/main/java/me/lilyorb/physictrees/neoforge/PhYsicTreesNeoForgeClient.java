@@ -1,5 +1,6 @@
 package me.lilyorb.physictrees.neoforge;
 
+import lombok.experimental.UtilityClass;
 import me.lilyorb.physictrees.client.particle.CollisionDustParticle;
 import me.lilyorb.physictrees.particle.PhysicsParticles;
 import me.lilyorb.physictrees.tree.TreeFelling;
@@ -15,14 +16,12 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
 import static me.lilyorb.physictrees.core.Constants.*;
 
+@UtilityClass
 public final class PhYsicTreesNeoForgeClient {
 
     private static BlockPos cachedTargetPos;
     private static long cachedTargetTick = Long.MIN_VALUE;
     private static TreeResult cachedTreeResult;
-
-    private PhYsicTreesNeoForgeClient() {
-    }
 
     public static void registerParticles(final RegisterParticleProvidersEvent event) {
         event.registerSpriteSet(PhysicsParticles.COLLISION_DUST, sprites -> new CollisionDustParticle.Provider(sprites));

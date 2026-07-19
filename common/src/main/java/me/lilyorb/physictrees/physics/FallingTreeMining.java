@@ -1,16 +1,19 @@
 package me.lilyorb.physictrees.physics;
 
-import dev.ryanhcode.sable.Sable;
-import dev.ryanhcode.sable.sublevel.SubLevel;
+import lombok.experimental.UtilityClass;
+import me.lilyorb.physictrees.core.TreePhysicsSettings;
 import me.lilyorb.physictrees.tree.TreeUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.HashSet;
+import java.util.Set;
+
+@UtilityClass
 public final class FallingTreeMining {
-    private FallingTreeMining() {
-    }
+    private static final Set<BlockPos> CLIENT_COLLISION_DAMAGED_LOGS = new HashSet<>();
 
     public static float partialBreakProgress() {
         return (float) Math.clamp(TreePhysicsSettings.partialBreakProgress(), 0.0D, 0.95D);
@@ -25,8 +28,7 @@ public final class FallingTreeMining {
     }
 
     public static float clientBreakProgress(final Level level, final BlockPos pos, final BlockState state) {
-        final SubLevel subLevel = getFallingTreeSubLevel(level, pos, state);
-        if (subLevel == null) {
+        if (!TreeUtil.isLog(state) || !CLIENT_COLLISION_DAMAGED_LOGS.contains(pos)) {
             return 0.0F;
         }
 
@@ -34,18 +36,19 @@ public final class FallingTreeMining {
     }
 
     public static boolean isFallingTreeLog(final Level level, final BlockPos pos, final BlockState state) {
-        final boolean serverCache = level instanceof final ServerLevel serverLevel && TreePhysics.isImpactedFallingTreeLog(serverLevel, pos);
-        final SubLevel subLevel = getFallingTreeSubLevel(level, pos, state);
-        return serverCache || subLevel != null;
+        return TreeUtil.isLog(state) && level instanceof final ServerLevel serverLevel && TreePhysics.isImpactedFallingTreeLog(serverLevel, pos);
     }
 
-    private static SubLevel getFallingTreeSubLevel(final Level level, final BlockPos pos, final BlockState state) {
-        if (!TreeUtil.isLog(state)) {
-            return null;
+    public static void markClientCollisionDamaged(final BlockPos pos, final boolean damaged) {
+        final BlockPos immutablePos = pos.immutable();
+        if (damaged) {
+            CLIENT_COLLISION_DAMAGED_LOGS.add(immutablePos);
+        } else {
+            CLIENT_COLLISION_DAMAGED_LOGS.remove(immutablePos);
         }
+    }
 
-        final SubLevel subLevel = Sable.HELPER.getContaining(level, pos);
-        final boolean fallingTreeSubLevel = TreePhysics.isFallingTreeSubLevel(subLevel);
-        return fallingTreeSubLevel ? subLevel : null;
+    public static void clearClientCollisionDamage() {
+        CLIENT_COLLISION_DAMAGED_LOGS.clear();
     }
 }

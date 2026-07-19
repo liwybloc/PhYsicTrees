@@ -1,5 +1,6 @@
 package me.lilyorb.physictrees.tree;
 
+import lombok.experimental.UtilityClass;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
@@ -9,10 +10,8 @@ import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
+@UtilityClass
 public final class TreeUtil {
-    private TreeUtil() {
-    }
-
     public static boolean isLog(final BlockState state) {
         return state.is(TreeTags.LOGS) || state.is(BlockTags.LOGS);
     }
@@ -22,7 +21,11 @@ public final class TreeUtil {
     }
 
     public static boolean isTreeBlock(final BlockState state) {
-        return state.is(TreeTags.TREE) || isLog(state) || isLeaf(state);
+        return state.is(TreeTags.TREE) || isLog(state) || isLeaf(state) || isAttachedBlock(state);
+    }
+
+    public static boolean isAttachedBlock(final BlockState state) {
+        return state.is(TreeTags.ATTACHED_BLOCKS);
     }
 
     public static boolean isRoot(final BlockState state) {
@@ -55,8 +58,8 @@ public final class TreeUtil {
         return Direction.Axis.Y;
     }
 
-    public static boolean isLeafPersistent(final BlockState state) {
-        return isLeaf(state) && state.hasProperty(BlockStateProperties.PERSISTENT) && state.getValue(BlockStateProperties.PERSISTENT);
+    public static boolean isLeafIrresolute(final BlockState state) {
+        return !isLeaf(state) || !state.hasProperty(BlockStateProperties.PERSISTENT) || !state.getValue(BlockStateProperties.PERSISTENT);
     }
 
     public static int getLeafDistance(final BlockState state, final BlockPos leafPos, final BlockPos trunkStart) {

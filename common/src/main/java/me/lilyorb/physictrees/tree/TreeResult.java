@@ -11,31 +11,45 @@ import java.util.Set;
 public final class TreeResult {
     private final Set<BlockPos> logs = new HashSet<>();
     private final Set<BlockPos> leaves = new HashSet<>();
+    private final Set<BlockPos> attachedBlocks = new HashSet<>();
     private final Map<BlockPos, Integer> leafConnectionDistances = new HashMap<>();
+    private double totalMass;
     private boolean grounded;
 
-    void addLog(final BlockPos pos) {
-        logs.add(pos.immutable());
+    public void addLog(final BlockPos pos, final double mass) {
+        if (logs.add(pos.immutable())) {
+            totalMass += mass;
+        }
     }
 
-    void addLeaf(final BlockPos pos) {
-        leaves.add(pos.immutable());
+    public void addLeaf(final BlockPos pos, final double mass) {
+        if (leaves.add(pos.immutable())) {
+            totalMass += mass;
+        }
     }
 
-    void removeLeaf(final BlockPos pos) {
-        leaves.remove(pos);
+    public void addAttachedBlock(final BlockPos pos, final double mass) {
+        if (attachedBlocks.add(pos.immutable())) {
+            totalMass += mass;
+        }
+    }
+
+    public void removeLeaf(final BlockPos pos, final double mass) {
+        if (leaves.remove(pos)) {
+            totalMass -= mass;
+        }
         leafConnectionDistances.remove(pos);
     }
 
-    void setLeafConnectionDistance(final BlockPos pos, final int distance) {
+    public void setLeafConnectionDistance(final BlockPos pos, final int distance) {
         leafConnectionDistances.put(pos.immutable(), distance);
     }
 
-    int leafConnectionDistance(final BlockPos pos) {
+    public int leafConnectionDistance(final BlockPos pos) {
         return leafConnectionDistances.getOrDefault(pos, Integer.MAX_VALUE);
     }
 
-    void markGrounded() {
+    public void markGrounded() {
         grounded = true;
     }
 
@@ -45,6 +59,14 @@ public final class TreeResult {
 
     public Set<BlockPos> leaves() {
         return Collections.unmodifiableSet(leaves);
+    }
+
+    public Set<BlockPos> attachedBlocks() {
+        return Collections.unmodifiableSet(attachedBlocks);
+    }
+
+    public double totalMass() {
+        return totalMass;
     }
 
     public boolean isValid() {

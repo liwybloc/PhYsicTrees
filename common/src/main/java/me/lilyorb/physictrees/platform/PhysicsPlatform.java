@@ -1,11 +1,11 @@
 package me.lilyorb.physictrees.platform;
 
+import lombok.experimental.UtilityClass;
+
 import java.lang.reflect.InvocationTargetException;
 
+@UtilityClass
 public final class PhysicsPlatform {
-    private PhysicsPlatform() {
-    }
-
     public static boolean isModLoaded(final String modId) {
         return isNeoForgeModLoaded(modId) || isFabricModLoaded(modId);
     }

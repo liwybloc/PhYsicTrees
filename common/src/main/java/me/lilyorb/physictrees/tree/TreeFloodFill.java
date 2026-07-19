@@ -1,5 +1,7 @@
 package me.lilyorb.physictrees.tree;
 
+import dev.ryanhcode.sable.physics.config.block_properties.PhysicsBlockPropertyHelper;
+import lombok.experimental.UtilityClass;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
@@ -9,16 +11,15 @@ import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.Set;
 
+@UtilityClass
 public final class TreeFloodFill {
     private static final int MAX_LOGS = 256;
     private static final int MAX_LEAVES = 2048;
+    private static final int MAX_ATTACHED_BLOCKS = 256;
     private static final int LEAF_PADDING = 7;
     private static final int MAX_LEAF_CONNECTION_DISTANCE = LEAF_PADDING;
     private static final Direction[] CARDINAL_DIRECTIONS = Direction.values();
     private static final BlockPos[] LOG_NEIGHBORS = buildNeighbors();
-
-    private TreeFloodFill() {
-    }
 
     public static TreeResult findTree(final BlockGetter level, final BlockPos start, final BlockPos ignoredBrokenPos) {
         final BlockState startState = level.getBlockState(start);
@@ -49,7 +50,7 @@ public final class TreeFloodFill {
                 continue;
             }
 
-            result.addLog(current);
+            result.addLog(current, blockMass(level, current));
             minX = Math.min(minX, current.getX());
             minY = Math.min(minY, current.getY());
             minZ = Math.min(minZ, current.getZ());
@@ -65,6 +66,7 @@ public final class TreeFloodFill {
         protectNearbyForeignTreeLeaves(level, result.logs(), connectedLogs, protectedLeaves, minX, minY, minZ, maxX, maxY, maxZ);
         collectLeaves(level, result, protectedLeaves, start.getY(), minX, minY, minZ, maxX, maxY, maxZ);
         pruneDistantAttachedLeaves(level, result, connectedLogs);
+        collectAttachedBlocks(level, result, start.getY());
         return result.isValid() ? result : null;
     }
 
@@ -331,7 +333,7 @@ public final class TreeFloodFill {
                 continue;
             }
 
-            result.addLeaf(current.pos);
+            result.addLeaf(current.pos, blockMass(level, current.pos));
             result.setLeafConnectionDistance(current.pos, current.distance);
             checkNeighborLeafBounds(level, protectedLeaves, cutY, current.wentAboveCutY, minX, minY, minZ, maxX, maxY, maxZ, visitedLeaves, queue, current.pos, current.distance + 1);
         }
@@ -372,8 +374,65 @@ public final class TreeFloodFill {
         }
 
         for (final BlockPos leaf : leavesToKeep) {
-            result.removeLeaf(leaf);
+            result.removeLeaf(leaf, blockMass(level, leaf));
         }
+    }
+
+    private static void collectAttachedBlocks(final BlockGetter level, final TreeResult result, final int cutY) {
+        final Set<BlockPos> visited = new HashSet<>();
+        final ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+
+        for (final BlockPos log : result.logs()) {
+            queue.add(log);
+            visited.add(log);
+        }
+        for (final BlockPos leaf : result.leaves()) {
+            queue.add(leaf);
+            visited.add(leaf);
+        }
+
+        while (!queue.isEmpty()) {
+            if (result.attachedBlocks().size() > MAX_ATTACHED_BLOCKS) {
+                return;
+            }
+
+            final BlockPos current = queue.removeFirst();
+            for (final Direction direction : CARDINAL_DIRECTIONS) {
+                final BlockPos next = current.relative(direction);
+                if (visited.contains(next) || result.logs().contains(next) || result.leaves().contains(next)) {
+                    continue;
+                }
+
+                if (next.getY() >= cutY && TreeUtil.isAttachedBlock(level.getBlockState(next))) {
+                    final BlockPos immutableNext = next.immutable();
+                    visited.add(immutableNext);
+                    result.addAttachedBlock(immutableNext, blockMass(level, immutableNext));
+                    queue.add(immutableNext);
+                }
+            }
+        }
+
+        for (final BlockPos leaf : result.leaves()) {
+            collectHangingAttachedBlocks(level, result, visited, leaf.below());
+        }
+    }
+
+    private static void collectHangingAttachedBlocks(final BlockGetter level, final TreeResult result, final Set<BlockPos> visited, final BlockPos start) {
+        BlockPos current = start;
+        while (result.attachedBlocks().size() <= MAX_ATTACHED_BLOCKS && TreeUtil.isAttachedBlock(level.getBlockState(current))) {
+            final BlockPos immutableCurrent = current.immutable();
+            if (!visited.add(immutableCurrent)) {
+                return;
+            }
+
+            result.addAttachedBlock(immutableCurrent, blockMass(level, immutableCurrent));
+            current = current.below();
+        }
+    }
+
+    private static double blockMass(final BlockGetter level, final BlockPos pos) {
+        final BlockState state = level.getBlockState(pos);
+        return PhysicsBlockPropertyHelper.getMass(level, pos, state);
     }
 
     private static int nearestForeignMidpointRange(final BlockPos leaf, final Set<BlockPos> mainLogs, final Set<BlockPos> connectedLogs) {
@@ -412,7 +471,7 @@ public final class TreeFloodFill {
     }
 
     private static boolean isCollectableLeaf(final BlockState state) {
-        return TreeUtil.isLeaf(state) && !TreeUtil.isLeafPersistent(state);
+        return TreeUtil.isLeaf(state) && TreeUtil.isLeafIrresolute(state);
     }
 
     private static boolean isWithinLeafBounds(final BlockPos pos, final int minX, final int minY, final int minZ, final int maxX, final int maxY, final int maxZ) {

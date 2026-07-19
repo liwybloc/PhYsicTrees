@@ -6,7 +6,12 @@
   "mixins": [
     "LeavesBlockMixin",
     "RapierVoxelColliderBakeryMixin",
+    "ServerSubLevelMixin",
     "ServerPlayerGameModeMixin"
+  ],
+  "client": [
+    "ClientPacketListenerMixin",
+    "MultiPlayerGameModeMixin"
   ],
   "injectors": {
     "defaultRequire": 1

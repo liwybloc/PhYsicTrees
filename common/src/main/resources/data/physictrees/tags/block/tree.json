@@ -1,6 +1,7 @@
 {
   "values": [
     "#physictrees:logs",
-    "#physictrees:leaves"
+    "#physictrees:leaves",
+    "#physictrees:attached_blocks"
   ]
 }

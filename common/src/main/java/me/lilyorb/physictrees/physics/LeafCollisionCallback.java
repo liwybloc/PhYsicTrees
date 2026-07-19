@@ -19,7 +19,7 @@ public final class LeafCollisionCallback extends FragileBlockCallback {
 
     @Override
     public boolean shouldTriggerFor(final BlockState state) {
-        return TreeUtil.isLeaf(state) && !TreeUtil.isLeafPersistent(state);
+        return TreeUtil.isLeaf(state) && TreeUtil.isLeafIrresolute(state);
     }
 
     @Override
