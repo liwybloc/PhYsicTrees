@@ -9,9 +9,7 @@ import me.lilyorb.physictrees.physics.FallingTreeImpact;
 import me.lilyorb.physictrees.physics.TreePhysics;
 import me.lilyorb.physictrees.tree.TreeUtil;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3d;
@@ -26,7 +24,6 @@ import java.util.Set;
 
 @UtilityClass
 public final class CollisionParticles {
-    private static final double PARTICLE_SEND_DISTANCE_SQR = 32.0D * 32.0D;
     private static final List<PendingBlockImpactParticle> PENDING_BLOCK_IMPACT_PARTICLES = new ArrayList<>();
     private static final Map<ServerSubLevel, Set<BlockPos>> IMPACT_PARTICLE_LOGS = new HashMap<>();
 
@@ -79,24 +76,17 @@ public final class CollisionParticles {
         final double x = particle.pos.x;
         final double y = particle.pos.y + TreePhysicsSettings.collisionParticleYOffset();
         final double z = particle.pos.z;
-        final ClientboundLevelParticlesPacket packet = new ClientboundLevelParticlesPacket(
+        particle.level.sendParticles(
                 particle.options,
-                false,
                 x,
                 y,
                 z,
-                (float) TreePhysicsSettings.collisionParticleOffsetX(),
-                (float) TreePhysicsSettings.collisionParticleOffsetY(),
-                (float) TreePhysicsSettings.collisionParticleOffsetZ(),
-                (float) TreePhysicsSettings.collisionParticleSpeed(),
-                Math.max(0, TreePhysicsSettings.collisionParticleCount())
+                Math.max(0, TreePhysicsSettings.collisionParticleCount()),
+                TreePhysicsSettings.collisionParticleOffsetX(),
+                TreePhysicsSettings.collisionParticleOffsetY(),
+                TreePhysicsSettings.collisionParticleOffsetZ(),
+                TreePhysicsSettings.collisionParticleSpeed()
         );
-
-        for (final ServerPlayer player : particle.level.players()) {
-            if (player.distanceToSqr(x, y, z) <= PARTICLE_SEND_DISTANCE_SQR) {
-                player.connection.send(packet);
-            }
-        }
     }
 
     public static void removeTrackedLogs(final ServerSubLevel subLevel) {

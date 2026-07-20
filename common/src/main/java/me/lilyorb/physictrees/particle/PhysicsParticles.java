@@ -30,7 +30,7 @@ public final class PhysicsParticles {
         }
 
         @Override
-        public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, CollisionDustParticleOptions> streamCodec() {
+        public net.minecraft.network.codec.@NotNull StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, CollisionDustParticleOptions> streamCodec() {
             return CollisionDustParticleOptions.STREAM_CODEC;
         }
     }

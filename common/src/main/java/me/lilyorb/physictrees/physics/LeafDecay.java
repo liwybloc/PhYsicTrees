@@ -9,7 +9,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.io.IOException;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -24,11 +23,8 @@ public final class LeafDecay {
             return;
         }
 
-        try(final ServerLevel level = impact.level()) {
-            impact.leaves().forEach(leaf -> markLeaf(level, leaf));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        @SuppressWarnings("resource") final ServerLevel level = impact.level();
+        impact.leaves().forEach(leaf -> markLeaf(level, leaf));
     }
 
     private static void markLeaf(final ServerLevel level, final BlockPos leaf) {

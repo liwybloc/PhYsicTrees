@@ -44,15 +44,27 @@ public final class TreePhysicsSettings {
     }
 
     public static double getAngularMultiplier() {
-        return 2.67676767D;
+        return 1.1D;
     }
 
     public static double counterImpulseNoBreakRatio() {
-        return 0.17D;
+        return 0.25D;
     }
 
     public static double counterImpulseBreakRatio() {
-        return 0.0D;
+        return -0.8D;
+    }
+
+    public static double centerMassPushHeightRatio() {
+        return 0.72D;
+    }
+
+    public static double minimumPushLeverArm() {
+        return 1.25D;
+    }
+
+    public static double maximumPushLeverArm() {
+        return 5.5D;
     }
 
     public static double impactProbeDistance() {

@@ -24,7 +24,7 @@ public final class PhYsicTreesNeoForgeClient {
     private static TreeResult cachedTreeResult;
 
     public static void registerParticles(final RegisterParticleProvidersEvent event) {
-        event.registerSpriteSet(PhysicsParticles.COLLISION_DUST, sprites -> new CollisionDustParticle.Provider(sprites));
+        event.registerSpriteSet(PhysicsParticles.COLLISION_DUST, CollisionDustParticle.Provider::new);
     }
 
     public static void renderAxeIndicator(final RenderGuiEvent.Post event) {
