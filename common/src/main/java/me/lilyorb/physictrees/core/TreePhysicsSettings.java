@@ -40,7 +40,7 @@ public final class TreePhysicsSettings {
     }
 
     public static double getAngularMultiplier() {
-        return 1.4D;
+        return 0.75D;
     }
 
     public static double centerMassImpulseRatio() {
@@ -72,7 +72,7 @@ public final class TreePhysicsSettings {
     }
 
     public static double forwardFallVelocityLogExponent() {
-        return 1.0D;
+        return 0.85D;
     }
 
     public static double referenceForceLogCount() {
