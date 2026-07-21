@@ -47,6 +47,7 @@ public final class TreePhysics {
             breakCutBlock(level, player, cutPos);
         }
         FallingTreeForces.queue(level, player, cutPos, logs, tree, subLevel);
+        TreePhysicsSounds.playCreak(level, subLevel);
         return true;
     }
 

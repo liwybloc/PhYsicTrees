@@ -4,6 +4,7 @@
   "package": "me.lilyorb.physictrees.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "FragileBlockCallbackMixin",
     "LeavesBlockMixin",
     "RapierVoxelColliderBakeryMixin",
     "ServerSubLevelMixin",

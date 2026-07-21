@@ -26,6 +26,8 @@ public final class FallingTreeSubLevelData {
 
     private static final String FALLING_TREE_TAG = "physictrees_falling_tree";
     private static final String IMPACTED_TREE_TAG = "physictrees_impacted_tree";
+    private static final String PLAYED_CREAK_TAG = "physictrees_played_creak";
+    private static final String PLAYED_IMPACT_TAG = "physictrees_played_impact";
 
     public static boolean isFallingTree(final SubLevel subLevel) {
         if (subLevel instanceof final ServerSubLevel serverSubLevel) {
@@ -41,6 +43,36 @@ public final class FallingTreeSubLevelData {
             return tag != null && tag.getBoolean(FALLING_TREE_TAG) && tag.getBoolean(IMPACTED_TREE_TAG);
         }
         return false;
+    }
+
+    public static boolean hasPlayedCreak(final ServerSubLevel subLevel) {
+        final CompoundTag tag = subLevel.getUserDataTag();
+        return tag != null && tag.getBoolean(PLAYED_CREAK_TAG);
+    }
+
+    public static boolean hasPlayedImpact(final ServerSubLevel subLevel) {
+        final CompoundTag tag = subLevel.getUserDataTag();
+        return tag != null && tag.getBoolean(PLAYED_IMPACT_TAG);
+    }
+
+    public static void markPlayedCreak(final ServerSubLevel subLevel) {
+        final CompoundTag tag = mutableTag(subLevel);
+        tag.putBoolean(PLAYED_CREAK_TAG, true);
+        subLevel.setUserDataTag(tag);
+    }
+
+    public static void markPlayedImpact(final ServerSubLevel subLevel) {
+        final CompoundTag tag = mutableTag(subLevel);
+        tag.putBoolean(PLAYED_IMPACT_TAG, true);
+        subLevel.setUserDataTag(tag);
+    }
+
+    public static int storedLogCount(final ServerSubLevel subLevel) {
+        return storedRelativePositions(subLevel, FALLING_TREE_LOGS_TAG).size();
+    }
+
+    public static boolean hasStoredLeaves(final ServerSubLevel subLevel) {
+        return !storedRelativePositions(subLevel, FALLING_TREE_LEAVES_TAG).isEmpty();
     }
 
     public static void markFallingTree(final ServerSubLevel subLevel, final Set<BlockPos> logs, final Set<BlockPos> leaves, final Set<BlockPos> attachedBlocks, final BlockPos cutPos, final Player player) {

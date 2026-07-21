@@ -39,32 +39,48 @@ public final class TreePhysicsSettings {
         return 2;
     }
 
-    public static double baseUpwardNudge() {
-        return 0.2D;
-    }
-
     public static double getAngularMultiplier() {
-        return 1.1D;
+        return 1.4D;
     }
 
-    public static double counterImpulseNoBreakRatio() {
-        return 0.25D;
+    public static double centerMassImpulseRatio() {
+        return 0.3D;
     }
 
-    public static double counterImpulseBreakRatio() {
-        return -0.8D;
+    public static double targetFallAngularVelocity() {
+        return 0.85D;
     }
 
-    public static double centerMassPushHeightRatio() {
-        return 0.72D;
+    public static double targetFallLinearVelocity() {
+        return 0.12D;
     }
 
-    public static double minimumPushLeverArm() {
-        return 1.25D;
+    public static double forwardFallVelocityNudge() {
+        return 0.15D;
     }
 
-    public static double maximumPushLeverArm() {
-        return 5.5D;
+    public static double downwardFallVelocityNudge() {
+        return 0.35D;
+    }
+
+    public static double fallAngularVelocityHeightExponent() {
+        return -0.15D;
+    }
+
+    public static double fallLinearVelocityLogExponent() {
+        return -0.25D;
+    }
+
+    public static double forwardFallVelocityLogExponent() {
+        return 1.0D;
+    }
+
+    public static double referenceForceLogCount() {
+        return 4.0D;
+    }
+
+    public static double referenceForceHeight() {
+        return 6.0D;
     }
 
     public static double impactProbeDistance() {

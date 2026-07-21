@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -22,26 +23,19 @@ import java.util.Set;
 
 @UtilityClass
 public final class FallingTreeForces {
+    private static final Vector3dc UP = new Vector3d(0.0D, 1.0D, 0.0D);
+
     private static final List<PendingFallForce> PENDING_FALL_FORCES = new ArrayList<>();
 
     public static void queue(final ServerLevel level, final Player player, final BlockPos cutPos, final Set<BlockPos> logs, final TreeResult tree, final ServerSubLevel subLevel) {
         final Vec3 cutSide = chooseFallSide(player, cutPos, logs);
         final Vector3d fallDirection = new Vector3d(cutSide.x, 0.0D, cutSide.z).normalize();
 
-        final Vector3d topImpulsePosition = findPushImpulsePoint(logs, cutPos, subLevel);
-        final Vector3d baseImpulsePosition = toSubLevelPosition(cutPos, cutPos, subLevel);
-        final double angularNudge = tree.totalMass() * TreePhysicsSettings.getAngularMultiplier();
+        final TreeForceScale scale = treeForceScale(logs, cutPos, tree);
         final int forceTicks = Math.max(1, TreePhysicsSettings.forceTicks());
-        final double upwardNudge = (TreePhysicsSettings.baseUpwardNudge() * angularNudge) * (TreePhysicsSettings.breakCutBlock() ? 0.2D : 1.0D);
-        final Vector3d topImpulse = new Vector3d(fallDirection).mul(angularNudge / forceTicks);
-        topImpulse.y += upwardNudge / forceTicks;
-        final Vector3d baseCounterImpulse = new Vector3d(fallDirection)
-                .mul(-angularNudge *
-                        (TreePhysicsSettings.breakCutBlock() ? TreePhysicsSettings.counterImpulseBreakRatio()
-                                : TreePhysicsSettings.counterImpulseNoBreakRatio()) / forceTicks);
 
-        final PendingFallForce force = new PendingFallForce(level, subLevel, topImpulsePosition, topImpulse, baseImpulsePosition, baseCounterImpulse, forceTicks);
-        applyForceStep(force);
+        final PendingFallForce force = new PendingFallForce(level, subLevel, cutPos.immutable(), new Vector3d(fallDirection), scale, forceTicks, 0);
+//        applyForceStep(force);
         force.remainingTicks--;
         if (force.remainingTicks > 0) {
             PENDING_FALL_FORCES.add(force);
@@ -57,6 +51,11 @@ public final class FallingTreeForces {
                 continue;
             }
 
+            if(force.bufferTicks > 0) {
+                force.bufferTicks--;
+                continue;
+            }
+
             applyForceStep(force);
             force.remainingTicks--;
             if (force.remainingTicks <= 0) {
@@ -67,8 +66,40 @@ public final class FallingTreeForces {
 
     private static void applyForceStep(final PendingFallForce force) {
         final RigidBodyHandle handle = SubLevelPhysicsSystem.get(force.level).getPhysicsHandle(force.subLevel);
-        handle.applyImpulseAtPoint(new Vector3d(force.topImpulsePosition), new Vector3d(force.topImpulse));
-        handle.applyImpulseAtPoint(new Vector3d(force.baseImpulsePosition), new Vector3d(force.baseCounterImpulse));
+        final MassData massData = force.subLevel.getMassTracker();
+        if (massData == null || massData.isInvalid() || massData.getCenterOfMass() == null) {
+            return;
+        }
+
+        final Vector3d fallAxis = new Vector3d(UP).cross(force.fallDirection).normalize();
+        final Vector3d currentAngularVelocity = handle.getAngularVelocity(new Vector3d());
+        final double targetAngularVelocity = TreePhysicsSettings.targetFallAngularVelocity()
+                * TreePhysicsSettings.getAngularMultiplier()
+                * force.scale.angularVelocityScale();
+        final double angularDelta = Math.max(0.0D, targetAngularVelocity - currentAngularVelocity.dot(fallAxis));
+        final Vector3d angularImpulse = massData.getInertiaTensor().transform(new Vector3d(fallAxis).mul(angularDelta), new Vector3d());
+        final Vector3d predictedAngularVelocity = new Vector3d(currentAngularVelocity).fma(angularDelta, fallAxis);
+
+        final Vector3d currentLinearVelocity = handle.getLinearVelocity(new Vector3d());
+        final double targetLinearVelocity = TreePhysicsSettings.targetFallLinearVelocity()
+                * TreePhysicsSettings.centerMassImpulseRatio()
+                * force.scale.translationScale();
+        final double linearDelta = targetLinearVelocity - currentLinearVelocity.dot(force.fallDirection);
+        final Vector3d linearImpulse = new Vector3d(force.fallDirection).mul(massData.getMass() * linearDelta);
+        final Vector3d predictedLinearVelocity = new Vector3d(currentLinearVelocity).fma(linearDelta, force.fallDirection);
+
+        handle.applyLinearAndAngularImpulse(linearImpulse, angularImpulse);
+
+        final Vector3d centerOfMass = new Vector3d(massData.getCenterOfMass());
+        final Vector3d basePoint = toSubLevelPosition(force.cutPos, force.cutPos, force.subLevel);
+        final Vector3d baseOffset = basePoint.sub(centerOfMass, new Vector3d());
+        final Vector3d predictedBaseVelocity = new Vector3d(predictedAngularVelocity).cross(baseOffset).add(predictedLinearVelocity);
+        final double targetBaseForwardVelocity = TreePhysicsSettings.forwardFallVelocityNudge() * force.scale.forwardCorrectionScale();
+        final double baseForwardDelta = Math.max(0.0D, targetBaseForwardVelocity - predictedBaseVelocity.dot(force.fallDirection));
+        final double forceTicks = Math.max(1.0D, TreePhysicsSettings.forceTicks());
+        final Vector3d correctiveImpulse = new Vector3d(force.fallDirection).mul(baseForwardDelta * massData.getMass());
+        correctiveImpulse.y -= TreePhysicsSettings.downwardFallVelocityNudge() * massData.getMass() / forceTicks;
+        handle.applyImpulseAtPoint(centerOfMass, correctiveImpulse);
     }
 
     private static Vec3 chooseFallSide(final Player player, final BlockPos cutPos, final Set<BlockPos> logs) {
@@ -109,36 +140,38 @@ public final class FallingTreeForces {
         return dx <= 1 && dy <= 1 && dz <= 1 && dx + dy + dz > 0;
     }
 
-    private static Vector3d findPushImpulsePoint(final Set<BlockPos> logs, final BlockPos cutPos, final ServerSubLevel subLevel) {
-        final Vector3d centerOfMass = centerOfMass(subLevel, cutPos);
-        final double leverArm = pushLeverArm(logs, cutPos);
-        return centerOfMass.add(0.0D, leverArm, 0.0D);
+    private static TreeForceScale treeForceScale(final Set<BlockPos> logs, final BlockPos cutPos, final TreeResult tree) {
+        final int logCount = Math.max(1, logs.size());
+        final int height = treeHeight(logs, cutPos);
+        final double referenceLogs = Math.max(1.0D, TreePhysicsSettings.referenceForceLogCount());
+        final double referenceHeight = Math.max(1.0D, TreePhysicsSettings.referenceForceHeight());
+        final double angularVelocityScale = exponentScale(
+                height / referenceHeight,
+                TreePhysicsSettings.fallAngularVelocityHeightExponent()
+        );
+        final double translationScale = exponentScale(
+                logCount / referenceLogs,
+                TreePhysicsSettings.fallLinearVelocityLogExponent()
+        );
+        final double forwardCorrectionScale = exponentScale(
+                logCount / referenceLogs,
+                TreePhysicsSettings.forwardFallVelocityLogExponent()
+        );
+        return new TreeForceScale(angularVelocityScale, translationScale, forwardCorrectionScale);
     }
 
-    private static Vector3d centerOfMass(final ServerSubLevel subLevel, final BlockPos cutPos) {
-        final MassData massData = subLevel.getMassTracker();
-        if (massData != null && massData.getCenterOfMass() != null) {
-            return new Vector3d(massData.getCenterOfMass());
-        }
-
-        return toSubLevelPosition(cutPos, cutPos, subLevel);
-    }
-
-    private static double pushLeverArm(final Set<BlockPos> logs, final BlockPos cutPos) {
+    private static int treeHeight(final Set<BlockPos> logs, final BlockPos cutPos) {
         int highestY = cutPos.getY();
         int lowestY = cutPos.getY();
         for (final BlockPos pos : logs) {
             highestY = Math.max(highestY, pos.getY());
             lowestY = Math.min(lowestY, pos.getY());
         }
+        return Math.max(1, highestY - lowestY + 1);
+    }
 
-        final double treeHeight = Math.max(1.0D, highestY - lowestY + 1.0D);
-        final double leverArm = treeHeight * TreePhysicsSettings.centerMassPushHeightRatio();
-        return Math.clamp(
-                leverArm,
-                TreePhysicsSettings.minimumPushLeverArm(),
-                TreePhysicsSettings.maximumPushLeverArm()
-        );
+    private static double exponentScale(final double ratio, final double exponent) {
+        return Math.pow(Math.max(1.0E-6D, ratio), exponent);
     }
 
     private static Vector3d toSubLevelPosition(final BlockPos worldPos, final BlockPos cutPos, final ServerSubLevel subLevel) {
@@ -168,10 +201,13 @@ public final class FallingTreeForces {
     private static final class PendingFallForce {
         private final ServerLevel level;
         private final ServerSubLevel subLevel;
-        private final Vector3d topImpulsePosition;
-        private final Vector3d topImpulse;
-        private final Vector3d baseImpulsePosition;
-        private final Vector3d baseCounterImpulse;
+        private final BlockPos cutPos;
+        private final Vector3d fallDirection;
+        private final TreeForceScale scale;
         private int remainingTicks;
+        private int bufferTicks;
+    }
+
+    private record TreeForceScale(double angularVelocityScale, double translationScale, double forwardCorrectionScale) {
     }
 }

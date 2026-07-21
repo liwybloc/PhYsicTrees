@@ -12,9 +12,12 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 
-public final class  TreeLogCollisionCallback implements BlockSubLevelCollisionCallback {
+public final class TreeLogCollisionCallback implements BlockSubLevelCollisionCallback {
     public static final TreeLogCollisionCallback INSTANCE = new TreeLogCollisionCallback();
+    private static final Vector3dc UP = new Vector3d(0.0D, 1.0D, 0.0D);
+    private static final double IMPACT_UPRIGHTNESS_THRESHOLD = 0.75D;
 
     private TreeLogCollisionCallback() {
     }
@@ -32,7 +35,12 @@ public final class  TreeLogCollisionCallback implements BlockSubLevelCollisionCa
             final BlockState collidedState = getCollidedState(level, otherHitBlockPos);
             if (collidedState != null) {
                 TreePhysics.queueBlockImpactParticles(level, subLevel, pos, hitPos, collidedState, otherHitBlockPos);
-                TreePhysics.markFallingTreeImpacted(subLevel);
+                if (uprightness(subLevel) < IMPACT_UPRIGHTNESS_THRESHOLD) {
+                    TreePhysicsSounds.playImpact(level, subLevel);
+                    TreePhysics.markFallingTreeImpacted(subLevel);
+                } else {
+                    TreePhysicsSounds.playCreak(level, subLevel);
+                }
             }
         }
 
@@ -70,5 +78,10 @@ public final class  TreeLogCollisionCallback implements BlockSubLevelCollisionCa
         }
 
         return null;
+    }
+
+    private static double uprightness(final ServerSubLevel subLevel) {
+        final Vector3d direction = subLevel.logicalPose().transformNormal(UP, new Vector3d());
+        return Math.max(0.0D, direction.dot(UP));
     }
 }
