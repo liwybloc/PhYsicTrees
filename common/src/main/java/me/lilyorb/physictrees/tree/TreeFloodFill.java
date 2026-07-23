@@ -5,6 +5,7 @@ import lombok.experimental.UtilityClass;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayDeque;
@@ -67,6 +68,9 @@ public final class TreeFloodFill {
         collectLeaves(level, result, protectedLeaves, start.getY(), minX, minY, minZ, maxX, maxY, maxZ);
         pruneDistantAttachedLeaves(level, result, connectedLogs);
         collectAttachedBlocks(level, result, start.getY());
+        if (hasBlockingLogAttachment(level, result)) {
+            return null;
+        }
         return result.isValid() ? result : null;
     }
 
@@ -428,6 +432,41 @@ public final class TreeFloodFill {
             result.addAttachedBlock(immutableCurrent, blockMass(level, immutableCurrent));
             current = current.below();
         }
+    }
+
+    private static boolean hasBlockingLogAttachment(final BlockGetter level, final TreeResult result) {
+        for (final BlockPos log : result.logs()) {
+            for (final Direction direction : CARDINAL_DIRECTIONS) {
+                final BlockPos neighbor = log.relative(direction);
+                if (result.logs().contains(neighbor)
+                        || result.leaves().contains(neighbor)
+                        || result.attachedBlocks().contains(neighbor)) {
+                    continue;
+                }
+
+                if (isBlockedLogAttachment(level.getBlockState(neighbor))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isBlockedLogAttachment(final BlockState state) {
+        if (state.isAir()
+                || TreeUtil.isLog(state)
+                || TreeUtil.isLeaf(state)
+                || TreeUtil.isAttachedBlock(state)
+                || TreeUtil.isRoot(state)
+                || TreeUtil.canBeRoot(state)
+                || state.is(Blocks.GRASS_BLOCK)
+                || state.is(Blocks.SHORT_GRASS)
+                || state.is(Blocks.TALL_GRASS)) {
+            return false;
+        }
+
+        return true;
     }
 
     private static double blockMass(final BlockGetter level, final BlockPos pos) {
